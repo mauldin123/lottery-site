@@ -36,6 +36,10 @@ export default function RootLayout({
   <Link href="/lottery" className="font-medium">
     Lottery
   </Link>
+  <Link href="/league" className="font-medium">
+  League
+</Link>
+
   </nav>
 
   {children}
