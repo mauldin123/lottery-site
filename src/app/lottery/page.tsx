@@ -443,6 +443,7 @@ export default function LotteryPage() {
     setLowestLotteryWonPick(null);
     setIsSaved(false);
     setError(null);
+    
 
     // Redirect to league page
     router.push("/league");
@@ -564,7 +565,159 @@ export default function LotteryPage() {
       showToast("Failed to export CSV.", "error");
     }
   }
-  
+
+  // Share functionality - generate shareable link
+  function shareLotteryResults(): void {
+    if (!lotteryData || !finalResults) {
+      setError("No results to share.");
+      return;
+    }
+
+    try {
+      // Save results temporarily with a share ID
+      const shareId = `share_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      const shareData = {
+        id: shareId,
+        timestamp: new Date().toISOString(),
+        leagueId: lotteryData.leagueId,
+        leagueName: lotteryData.leagueInfo?.name ?? "Unknown League",
+        season: lotteryData.leagueInfo?.season ?? "Unknown Season",
+        results: finalResults,
+        teams: lotteryData.teams,
+      };
+
+      // Store in localStorage with share ID
+      localStorage.setItem(`lottery_share_${shareId}`, JSON.stringify(shareData));
+
+      // Generate shareable URL
+      const shareUrl = `${window.location.origin}/lottery/share/${shareId}`;
+
+      // Copy to clipboard
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(shareUrl).then(() => {
+          showToast("Shareable link copied to clipboard!", "success");
+        }).catch(() => {
+          // Fallback: show URL in prompt
+          prompt("Copy this link to share:", shareUrl);
+          showToast("Share link generated!", "info");
+        });
+      } else {
+        // Fallback for browsers without clipboard API
+        prompt("Copy this link to share:", shareUrl);
+        showToast("Share link generated!", "info");
+      }
+    } catch (e: any) {
+      setError("Failed to generate share link. " + (e?.message || ""));
+      showToast("Failed to generate share link.", "error");
+    }
+  }
+
+  // Print-friendly view
+  function printLotteryResults(): void {
+    if (!lotteryData || !finalResults) {
+      setError("No results to print.");
+      return;
+    }
+
+    // Create print window
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      setError("Please allow popups to print.");
+      return;
+    }
+
+    const leagueName = lotteryData.leagueInfo?.name ?? "Unknown League";
+    const season = lotteryData.leagueInfo?.season ?? "Unknown Season";
+    
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Lottery Results - ${leagueName}</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              padding: 20px;
+              color: #000;
+              background: #fff;
+            }
+            h1 { color: #000; margin-bottom: 10px; }
+            h2 { color: #333; margin-top: 20px; margin-bottom: 10px; }
+            .info { margin-bottom: 20px; color: #666; }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 20px;
+            }
+            th, td {
+              border: 1px solid #ddd;
+              padding: 12px;
+              text-align: left;
+            }
+            th {
+              background-color: #f2f2f2;
+              font-weight: bold;
+            }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+            .pick-badge {
+              display: inline-block;
+              padding: 4px 8px;
+              background: #10b981;
+              color: white;
+              border-radius: 4px;
+              font-weight: bold;
+            }
+            @media print {
+              body { margin: 0; padding: 15px; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Draft Lottery Results</h1>
+          <div class="info">
+            <p><strong>League:</strong> ${leagueName}</p>
+            <p><strong>Season:</strong> ${season}</p>
+            <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
+          </div>
+          <h2>Draft Order</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Pick</th>
+                <th>Team</th>
+                <th>Pre-Lottery Odds</th>
+                <th>Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${finalResults.map((result) => {
+                const pick = `1.${String(result.pick).padStart(2, '0')}`;
+                return `
+                  <tr>
+                    <td><span class="pick-badge">${pick}</span></td>
+                    <td>${result.teamName}</td>
+                    <td>${result.odds}%</td>
+                    <td>${result.wasLocked ? 'Locked' : 'Lottery'}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.onafterprint = function() {
+                window.close();
+              };
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  }
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -833,6 +986,20 @@ export default function LotteryPage() {
                 title="Export results as CSV"
               >
                 Export CSV
+              </button>
+              <button
+                className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800"
+                onClick={shareLotteryResults}
+                title="Generate shareable link"
+              >
+                Share
+              </button>
+              <button
+                className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800"
+                onClick={printLotteryResults}
+                title="Print results"
+              >
+                Print
               </button>
             </div>
           </div>

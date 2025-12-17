@@ -1583,6 +1583,53 @@ export default function LeaguePage() {
                 </button>
               </div>
               
+              {/* Visualization Charts */}
+              <div className="mt-6 grid gap-4 md:grid-cols-2">
+                {teams.map((team) => {
+                  const teamProbs = permutationResults.get(team.rosterId);
+                  if (!teamProbs || teamProbs.size === 0) return null;
+                  
+                  const probsArray = Array.from(teamProbs.values());
+                  const maxProb = probsArray.length > 0 ? Math.max(...probsArray) : 0;
+                  
+                  // Get top 6 picks by probability
+                  const sortedPicks = Array.from(teamProbs.entries())
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 6);
+                  
+                  return (
+                    <div key={team.rosterId} className="rounded-lg border border-blue-800/50 bg-blue-950/10 p-4">
+                      <h4 className="text-sm font-semibold text-blue-200 mb-3">{team.displayName}</h4>
+                      <div className="space-y-2">
+                        {sortedPicks.map(([pick, prob]) => {
+                          const width = maxProb > 0 ? (prob / maxProb) * 100 : 0;
+                          
+                          return (
+                            <div key={pick} className="flex items-center gap-2">
+                              <span className="text-xs text-blue-300/70 w-12 flex-shrink-0">
+                                1.{String(pick).padStart(2, '0')}
+                              </span>
+                              <div className="flex-1 bg-blue-900/30 rounded-full h-4 overflow-hidden">
+                                <div
+                                  className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all"
+                                  style={{ width: `${width}%` }}
+                                />
+                              </div>
+                              <span className="text-xs text-blue-200 w-12 text-right">
+                                {prob.toFixed(1)}%
+                              </span>
+                            </div>
+                          );
+                        })}
+                        {teamProbs.size > 6 && (
+                          <p className="text-xs text-blue-300/50 mt-2">Showing top 6 picks. See table for full details.</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
               <div className="mt-6 overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
                 <table className="w-full border-collapse text-sm min-w-[600px]">
                   <thead>
