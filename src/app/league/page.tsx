@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 // Shape of the normalized user payload returned by `/api/sleeper/user/by-username/[username]`
 type UserResult = {
@@ -106,6 +107,7 @@ function sortTeamsByRecord(
 
 // Main page component for exploring Sleeper leagues
 export default function LeaguePage() {
+  const router = useRouter();
   // Precompute the list of seasons once on mount
   const seasons = useMemo(() => seasonOptions(), []);
   const defaultSeason = seasons[0] ?? String(new Date().getFullYear());
@@ -138,6 +140,10 @@ export default function LeaguePage() {
 
   // Lottery simulation results
   const [lotteryResults, setLotteryResults] = useState<LotteryResult[] | null>(null);
+  
+  // Permutation analysis results
+  const [permutationResults, setPermutationResults] = useState<Map<number, Map<number, number>> | null>(null);
+  const [isCalculatingPermutations, setIsCalculatingPermutations] = useState(false);
 
   // Look up a Sleeper user by username, then fetch their leagues for the chosen season
   async function findLeaguesByUsername() {
@@ -678,6 +684,204 @@ export default function LeaguePage() {
     setError(null);
   }
 
+  // Calculate all permutations using Monte Carlo simulation
+  function calculateAllPermutations(): void {
+    if (teams.length === 0) {
+      setError("No teams loaded. Please load a league first.");
+      return;
+    }
+
+    setIsCalculatingPermutations(true);
+    setError(null);
+
+    // Use setTimeout to allow UI to update
+    setTimeout(() => {
+      try {
+        // Build map of locked picks
+        const lockedPicks = new Map<number, number>();
+        teams.forEach((team) => {
+          const config = getLotteryConfig(team.rosterId);
+          if (config.isLockedPick && config.manualSlot) {
+            const pickNum = parseManualSlot(config.manualSlot);
+            if (pickNum !== null) {
+              lockedPicks.set(pickNum, team.rosterId);
+            }
+          }
+        });
+
+        // Get all eligible teams
+        const eligibleTeams: Array<{
+          rosterId: number;
+          balls: number;
+          teamName: string;
+        }> = [];
+
+        teams.forEach((team) => {
+          const config = getLotteryConfig(team.rosterId);
+          if (config.includeInLottery && !config.isLockedPick && config.balls > 0) {
+            eligibleTeams.push({
+              rosterId: team.rosterId,
+              balls: config.balls,
+              teamName: team.displayName,
+            });
+          }
+        });
+
+        if (eligibleTeams.length === 0 && lockedPicks.size === 0) {
+          setError("No eligible teams for lottery. Please configure at least one team with balls > 0, or set up locked picks.");
+          setIsCalculatingPermutations(false);
+          return;
+        }
+
+        const totalPicks = teams.length;
+        const NUM_SIMULATIONS = 10000; // Run 10,000 simulations for accuracy
+        
+        // Track: team rosterId -> pick number -> count
+        const pickCounts = new Map<number, Map<number, number>>();
+        
+        // Initialize all teams
+        teams.forEach((team) => {
+          pickCounts.set(team.rosterId, new Map());
+          for (let pick = 1; pick <= totalPicks; pick++) {
+            pickCounts.get(team.rosterId)!.set(pick, 0);
+          }
+        });
+
+        // Run simulations
+        for (let sim = 0; sim < NUM_SIMULATIONS; sim++) {
+          const results: Array<{ pick: number; rosterId: number }> = [];
+          const teamMap = new Map<number, TeamsResult["teams"][0]>();
+          teams.forEach((team) => teamMap.set(team.rosterId, team));
+          const assignedRosterIds = new Set<number>();
+
+          // Assign locked picks
+          const sortedLockedPicks = Array.from(lockedPicks.entries()).sort((a, b) => a[0] - b[0]);
+          sortedLockedPicks.forEach(([pickNum, rosterId]) => {
+            results.push({ pick: pickNum, rosterId });
+            assignedRosterIds.add(rosterId);
+          });
+
+          // Draw remaining picks
+          let currentPick = 1;
+          while (results.length < totalPicks) {
+            if (lockedPicks.has(currentPick)) {
+              currentPick++;
+              continue;
+            }
+
+            const availableTeams = eligibleTeams.filter(
+              (t) => !assignedRosterIds.has(t.rosterId)
+            );
+
+            if (availableTeams.length === 0) {
+              const remainingTeams = teams.filter((t) => !assignedRosterIds.has(t.rosterId));
+              if (remainingTeams.length > 0) {
+                const sortedRemaining = [...remainingTeams].sort((a, b) => {
+                  const aW = a.record?.wins ?? 0;
+                  const aL = a.record?.losses ?? 0;
+                  const aT = a.record?.ties ?? 0;
+                  const bW = b.record?.wins ?? 0;
+                  const bL = b.record?.losses ?? 0;
+                  const bT = b.record?.ties ?? 0;
+                  
+                  const aPct = winPct(aW, aL, aT);
+                  const bPct = winPct(bW, bL, bT);
+                  
+                  if (aPct !== bPct) return aPct - bPct;
+                  if (aW !== bW) return aW - bW;
+                  if (bL !== aL) return bL - aL;
+                  if (bT !== aT) return bT - aT;
+                  return (b.rosterId ?? 0) - (a.rosterId ?? 0);
+                });
+                
+                const team = sortedRemaining[0];
+                results.push({ pick: currentPick, rosterId: team.rosterId });
+                assignedRosterIds.add(team.rosterId);
+              }
+              currentPick++;
+              continue;
+            }
+
+            const drawnRosterId = weightedRandomDraw(availableTeams);
+            if (drawnRosterId === null) break;
+
+            results.push({ pick: currentPick, rosterId: drawnRosterId });
+            assignedRosterIds.add(drawnRosterId);
+            currentPick++;
+          }
+
+          // Count results
+          results.forEach((result) => {
+            const teamCounts = pickCounts.get(result.rosterId);
+            if (teamCounts) {
+              const current = teamCounts.get(result.pick) ?? 0;
+              teamCounts.set(result.pick, current + 1);
+            }
+          });
+        }
+
+        // Convert counts to percentages
+        const probabilities = new Map<number, Map<number, number>>();
+        pickCounts.forEach((pickMap, rosterId) => {
+          const probMap = new Map<number, number>();
+          pickMap.forEach((count, pick) => {
+            const percentage = (count / NUM_SIMULATIONS) * 100;
+            probMap.set(pick, Math.round(percentage * 10) / 10);
+          });
+          probabilities.set(rosterId, probMap);
+        });
+
+        setPermutationResults(probabilities);
+        setIsCalculatingPermutations(false);
+      } catch (e: any) {
+        setError("Failed to calculate permutations. " + (e?.message || ""));
+        setIsCalculatingPermutations(false);
+      }
+    }, 100);
+  }
+
+  // Finalize lottery configuration and navigate to lottery page
+  function finalizeLottery(): void {
+    if (teams.length === 0) {
+      setError("No teams loaded. Please load a league first.");
+      return;
+    }
+
+    if (!selectedLeagueId) {
+      setError("No league selected.");
+      return;
+    }
+
+    // Validate that we have at least some eligible teams or locked picks
+    const hasEligibleTeams = Array.from(lotteryConfigs.values()).some(
+      (config) => config.includeInLottery && !config.isLockedPick && config.balls > 0
+    );
+    const hasLockedPicks = Array.from(lotteryConfigs.values()).some(
+      (config) => config.isLockedPick && config.manualSlot
+    );
+
+    if (!hasEligibleTeams && !hasLockedPicks) {
+      setError("No eligible teams for lottery. Please configure at least one team with balls > 0, or set up locked picks.");
+      return;
+    }
+
+    // Save lottery configuration to sessionStorage
+    const lotteryData = {
+      leagueId: selectedLeagueId,
+      leagueInfo,
+      teams,
+      lotteryConfigs: Array.from(lotteryConfigs.entries()),
+      timestamp: new Date().toISOString(),
+    };
+
+    try {
+      sessionStorage.setItem("lotteryFinalizeData", JSON.stringify(lotteryData));
+      router.push("/lottery");
+    } catch (e: any) {
+      setError("Failed to save lottery configuration. " + (e?.message || ""));
+    }
+  }
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
       <h1 className="text-4xl font-bold">Load a Sleeper League</h1>
@@ -901,11 +1105,20 @@ export default function LeaguePage() {
               Simulate draw
             </button>
             <button
-              className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-xl border border-emerald-800 bg-emerald-900 px-4 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={teams.length === 0}
-              title="Display all possible draft order combinations and their probabilities based on the current lottery configuration."
+              onClick={finalizeLottery}
+              title="Finalize the lottery configuration and proceed to run the official lottery draw."
             >
-              Show all permutations
+              Finalize lottery
+            </button>
+            <button
+              className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={teams.length === 0 || isCalculatingPermutations}
+              onClick={calculateAllPermutations}
+              title="Calculate probability distributions for all possible draft order outcomes using Monte Carlo simulation."
+            >
+              {isCalculatingPermutations ? "Calculating..." : "Show all permutations"}
             </button>
           </div>
 
@@ -955,6 +1168,103 @@ export default function LeaguePage() {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Permutation Analysis Results */}
+          {permutationResults && permutationResults.size > 0 ? (
+            <div className="mt-6 rounded-2xl border border-blue-800 bg-blue-950/20 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-xl font-semibold text-blue-100">Probability Distribution Analysis</h3>
+                  <p className="mt-1 text-sm text-blue-200/80">
+                    Based on 10,000 Monte Carlo simulations. Shows the probability each team lands each pick.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setPermutationResults(null)}
+                  className="text-sm text-blue-300/70 hover:text-blue-200"
+                >
+                  Clear
+                </button>
+              </div>
+              
+              <div className="mt-6 overflow-x-auto">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-blue-800/50">
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-blue-300 sticky left-0 bg-blue-950/40 z-10">
+                        Team
+                      </th>
+                      {Array.from({ length: teams.length }, (_, i) => i + 1).map((pick) => (
+                        <th
+                          key={pick}
+                          className="px-2 py-2 text-center text-xs font-semibold text-blue-300 min-w-[60px]"
+                        >
+                          1.{String(pick).padStart(2, "0")}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {teams.map((team, index) => {
+                      const teamProbs = permutationResults.get(team.rosterId);
+                      if (!teamProbs) return null;
+                      
+                      // Find the pick with highest probability for this team
+                      let maxProb = 0;
+                      let maxPick = 1;
+                      teamProbs.forEach((prob, pick) => {
+                        if (prob > maxProb) {
+                          maxProb = prob;
+                          maxPick = pick;
+                        }
+                      });
+                      
+                      return (
+                        <tr
+                          key={team.rosterId}
+                          className="border-b border-blue-800/30 hover:bg-blue-950/30"
+                        >
+                          <td className="px-3 py-2 text-blue-100 font-medium sticky left-0 bg-blue-950/40 z-10">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-blue-300/70">#{index + 1}</span>
+                              <span className="text-xs">{team.displayName}</span>
+                            </div>
+                          </td>
+                      {Array.from({ length: teams.length }, (_, i) => i + 1).map((pick) => {
+                        const prob = teamProbs.get(pick) ?? 0;
+                        const isMaxProb = pick === maxPick && maxProb > 0;
+                        const intensity = prob > 50 ? "bg-blue-600/40" : prob > 25 ? "bg-blue-700/30" : prob > 10 ? "bg-blue-800/20" : prob > 0 ? "bg-blue-900/10" : "";
+                        
+                        return (
+                          <td
+                            key={pick}
+                            className={`px-2 py-2 text-center text-xs ${intensity} ${
+                              isMaxProb ? "ring-2 ring-blue-500/50" : ""
+                            }`}
+                            title={`${team.displayName} has a ${prob}% chance of landing pick 1.${String(pick).padStart(2, "0")}`}
+                          >
+                            {prob > 0 ? (
+                              <span className={`${prob >= 25 ? "font-semibold text-blue-100" : prob >= 10 ? "font-medium text-blue-200" : "text-blue-300/80"}`}>
+                                {prob}%
+                              </span>
+                            ) : (
+                              <span className="text-blue-900/50">—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              
+              <div className="mt-4 text-xs text-blue-300/70">
+                <p>💡 Hover over cells to see details. Highlighted cells show each team's most likely pick position.</p>
               </div>
             </div>
           ) : null}

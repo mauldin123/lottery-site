@@ -33,13 +33,12 @@ export default function RootLayout({
   <Link href="/" className="font-medium">
     Home
   </Link>
-  <Link href="/lottery" className="font-medium">
-    Lottery
-  </Link>
   <Link href="/league" className="font-medium">
-  League
-</Link>
-
+    League
+  </Link>
+  <Link href="/history" className="font-medium">
+    History
+  </Link>
   </nav>
 
   {children}
