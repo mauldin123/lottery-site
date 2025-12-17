@@ -491,8 +491,25 @@ export default function LotteryPage() {
       </p>
 
       {error ? (
-        <div className="mt-6 rounded-2xl border border-red-900/60 bg-red-950/40 px-5 py-4 text-red-200">
-          {error}
+        <div className="mt-6 rounded-2xl border border-red-900/60 bg-red-950/40 px-5 py-4 text-red-200" role="alert" aria-live="polite">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <div className="flex-1">
+              <h3 className="font-semibold text-red-100 mb-1">Error</h3>
+              <p className="text-sm">{error}</p>
+            </div>
+            <button
+              onClick={() => setError(null)}
+              className="text-red-400 hover:text-red-300 transition-colors"
+              aria-label="Dismiss error"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -526,8 +543,8 @@ export default function LotteryPage() {
           This configuration was finalized and cannot be changed.
         </p>
 
-        <div className="mt-6 overflow-x-auto">
-          <table className="w-full border-collapse">
+        <div className="mt-6 overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
+          <table className="w-full border-collapse min-w-[600px]">
             <thead>
               <tr className="border-b border-zinc-800">
                 <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-300">Team</th>
@@ -593,9 +610,10 @@ export default function LotteryPage() {
         </p>
         <div className="mt-6">
           <button
-            className="rounded-xl border border-emerald-800 bg-emerald-900 px-6 py-3 text-lg font-medium text-emerald-100 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-xl border border-emerald-800 bg-emerald-900 px-6 py-3 text-lg font-medium text-emerald-100 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 transition-all flex items-center gap-2"
             onClick={runFinalLottery}
             disabled={finalResults !== null}
+            aria-label={finalResults ? "Lottery already run" : "Run final lottery"}
           >
             {finalResults ? "Lottery Already Run" : "Run Final Lottery"}
           </button>
@@ -670,7 +688,7 @@ export default function LotteryPage() {
               return (
                 <div
                   key={result.pick}
-                  className={`flex items-center justify-between rounded-lg ${borderIntensity} bg-emerald-950/40 transition-all duration-300 ${
+                  className={`flex flex-col sm:flex-row sm:items-center sm:justify-between rounded-lg ${borderIntensity} bg-emerald-950/40 transition-all duration-300 ${
                     isRevealed 
                       ? "cursor-default" 
                       : "cursor-pointer hover:bg-emerald-950/60 hover:border-emerald-700/70"
@@ -682,6 +700,15 @@ export default function LotteryPage() {
                     paddingBottom: `${paddingY}px`,
                   }}
                   onClick={() => !isRevealed && revealPick(result.pick)}
+                  onKeyDown={(e) => {
+                    if ((e.key === "Enter" || e.key === " ") && !isRevealed) {
+                      e.preventDefault();
+                      revealPick(result.pick);
+                    }
+                  }}
+                  tabIndex={!isRevealed ? 0 : -1}
+                  role={!isRevealed ? "button" : undefined}
+                  aria-label={!isRevealed ? `Reveal pick ${result.pick}` : undefined}
                 >
                   <div className="flex items-center gap-4 flex-1">
                     <div 
@@ -715,13 +742,13 @@ export default function LotteryPage() {
                     </div>
                   </div>
                   {team && isRevealed && (
-                    <div className="text-sm text-emerald-200/80">
+                    <div className="text-sm text-emerald-200/80 mt-2 sm:mt-0">
                       {team.record.wins}-{team.record.losses}
                       {team.record.ties ? `-${team.record.ties}` : ""}
                     </div>
                   )}
                   {!isRevealed && (
-                    <div className="text-sm text-emerald-200/80 blur-md select-none">
+                    <div className="text-sm text-emerald-200/80 blur-md select-none mt-2 sm:mt-0">
                       —-—
                     </div>
                   )}

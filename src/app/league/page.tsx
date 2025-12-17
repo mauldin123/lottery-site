@@ -125,6 +125,8 @@ export default function LeaguePage() {
 
   // Error and data state
   const [error, setError] = useState<string | null>(null);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+  const [leagueIdError, setLeagueIdError] = useState<string | null>(null);
 
   const [foundUser, setFoundUser] = useState<UserResult["user"] | null>(null);
   const [leagues, setLeagues] = useState<LeagueListResult["leagues"]>([]);
@@ -148,6 +150,7 @@ export default function LeaguePage() {
   // Look up a Sleeper user by username, then fetch their leagues for the chosen season
   async function findLeaguesByUsername() {
     setError(null);
+    setUsernameError(null);
     setLeagues([]);
     setSelectedLeagueId(null);
     setLeagueInfo(null);
@@ -157,7 +160,11 @@ export default function LeaguePage() {
 
     const uname = username.trim();
     if (!uname) {
-      setError("Username is required.");
+      setUsernameError("Username is required.");
+      return;
+    }
+    if (uname.length < 2) {
+      setUsernameError("Username must be at least 2 characters.");
       return;
     }
 
@@ -215,6 +222,7 @@ export default function LeaguePage() {
   // Fetch league details + teams from our Sleeper-backed API by numeric league ID
   async function loadLeagueById(leagueId: string) {
     setError(null);
+    setLeagueIdError(null);
     setSelectedLeagueId(null);
     setLeagueInfo(null);
     setTeams([]);
@@ -223,11 +231,11 @@ export default function LeaguePage() {
 
     const id = leagueId.trim();
     if (!id) {
-      setError("League ID is required.");
+      setLeagueIdError("League ID is required.");
       return;
     }
     if (!isNumericId(id)) {
-      setError("Invalid leagueId. Must be numeric.");
+      setLeagueIdError("Invalid league ID. Must be numeric only.");
       return;
     }
 
@@ -894,13 +902,44 @@ export default function LeaguePage() {
         <section className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-6">
           <h2 className="text-xl font-semibold">Find by username</h2>
 
-          <label className="mt-4 block text-sm text-zinc-300">Sleeper username</label>
+          <label htmlFor="username-input" className="mt-4 block text-sm text-zinc-300">
+            Sleeper username
+          </label>
           <input
-            className="mt-2 w-full rounded-xl border border-zinc-800 bg-black px-4 py-3 text-zinc-100 outline-none focus:border-zinc-600"
+            id="username-input"
+            type="text"
+            className={`mt-2 w-full rounded-xl border px-4 py-3 text-zinc-100 outline-none transition-colors bg-black ${
+              usernameError 
+                ? "border-red-600 focus:border-red-500 focus:ring-2 focus:ring-red-500/20" 
+                : "border-zinc-800 focus:border-zinc-600 focus:ring-2 focus:ring-zinc-600/20"
+            }`}
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={(e) => {
+              setUsername(e.target.value);
+              setUsernameError(null);
+            }}
+            onBlur={(e) => {
+              const value = e.target.value.trim();
+              if (value && value.length < 2) {
+                setUsernameError("Username must be at least 2 characters");
+              } else {
+                setUsernameError(null);
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && canFind && !loadingUser && !loadingLeagues) {
+                findLeaguesByUsername();
+              }
+            }}
             placeholder="example: chasennnn"
+            aria-invalid={usernameError ? "true" : "false"}
+            aria-describedby={usernameError ? "username-error" : undefined}
           />
+          {usernameError && (
+            <p id="username-error" className="mt-1 text-sm text-red-400" role="alert">
+              {usernameError}
+            </p>
+          )}
 
           <label className="mt-4 block text-sm text-zinc-300">Season</label>
           <select
@@ -916,10 +955,17 @@ export default function LeaguePage() {
           </select>
 
           <button
-            className="mt-4 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="mt-4 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center gap-2 transition-all"
             onClick={findLeaguesByUsername}
-            disabled={!canFind}
+            disabled={!canFind || loadingUser || loadingLeagues}
+            aria-label={loadingUser || loadingLeagues ? "Loading leagues" : "Find leagues"}
           >
+            {(loadingUser || loadingLeagues) && (
+              <svg className="animate-spin h-5 w-5 text-zinc-100" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            )}
             {loadingUser || loadingLeagues ? "Loading..." : "Find leagues"}
           </button>
 
@@ -957,19 +1003,58 @@ export default function LeaguePage() {
         <section className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-6">
           <h2 className="text-xl font-semibold">Load by league ID</h2>
 
-          <label className="mt-4 block text-sm text-zinc-300">League ID</label>
+          <label htmlFor="league-id-input" className="mt-4 block text-sm text-zinc-300">
+            League ID
+          </label>
           <input
-            className="mt-2 w-full rounded-xl border border-zinc-800 bg-black px-4 py-3 text-zinc-100 outline-none focus:border-zinc-600"
+            id="league-id-input"
+            type="text"
+            inputMode="numeric"
+            className={`mt-2 w-full rounded-xl border px-4 py-3 text-zinc-100 outline-none transition-colors bg-black ${
+              leagueIdError 
+                ? "border-red-600 focus:border-red-500 focus:ring-2 focus:ring-red-500/20" 
+                : "border-zinc-800 focus:border-zinc-600 focus:ring-2 focus:ring-zinc-600/20"
+            }`}
             value={leagueIdInput}
-            onChange={(e) => setLeagueIdInput(e.target.value)}
+            onChange={(e) => {
+              setLeagueIdInput(e.target.value);
+              setLeagueIdError(null);
+            }}
+            onBlur={(e) => {
+              const value = e.target.value.trim();
+              if (value && !isNumericId(value)) {
+                setLeagueIdError("League ID must be numeric only");
+              } else {
+                setLeagueIdError(null);
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && canLoadById && !loadingLeagueDetails) {
+                loadLeagueById(leagueIdInput);
+              }
+            }}
             placeholder="Example: 1180100331814481920"
+            aria-invalid={leagueIdError ? "true" : "false"}
+            aria-describedby={leagueIdError ? "league-id-error" : undefined}
           />
+          {leagueIdError && (
+            <p id="league-id-error" className="mt-1 text-sm text-red-400" role="alert">
+              {leagueIdError}
+            </p>
+          )}
 
           <button
-            className="mt-4 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="mt-4 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center gap-2 transition-all"
             onClick={() => loadLeagueById(leagueIdInput)}
-            disabled={!canLoadById}
+            disabled={!canLoadById || loadingLeagueDetails}
+            aria-label={loadingLeagueDetails ? "Loading league" : "Load league"}
           >
+            {loadingLeagueDetails && (
+              <svg className="animate-spin h-5 w-5 text-zinc-100" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            )}
             {loadingLeagueDetails ? "Loading..." : "Load league"}
           </button>
 
@@ -983,8 +1068,25 @@ export default function LeaguePage() {
       </div>
 
       {error ? (
-        <div className="mt-6 rounded-2xl border border-red-900/60 bg-red-950/40 px-5 py-4 text-red-200">
-          {error}
+        <div className="mt-6 rounded-2xl border border-red-900/60 bg-red-950/40 px-5 py-4 text-red-200" role="alert" aria-live="polite">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <div className="flex-1">
+              <h3 className="font-semibold text-red-100 mb-1">Error</h3>
+              <p className="text-sm">{error}</p>
+            </div>
+            <button
+              onClick={() => setError(null)}
+              className="text-red-400 hover:text-red-300 transition-colors"
+              aria-label="Dismiss error"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -998,9 +1100,15 @@ export default function LeaguePage() {
             </p>
           </div>
 
-          <div className="text-sm text-zinc-400">
-            {loadingLeagueDetails ? "Loading league data..." : null}
-          </div>
+          {loadingLeagueDetails && (
+            <div className="flex items-center gap-2 text-sm text-zinc-400">
+              <svg className="animate-spin h-4 w-4 text-zinc-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span>Loading league data...</span>
+            </div>
+          )}
         </div>
 
         <div className="mt-6 grid gap-6 md:grid-cols-2">
@@ -1042,7 +1150,7 @@ export default function LeaguePage() {
 
         <h3 className="mt-8 text-xl font-semibold">Teams</h3>
         {/* Teams are already sorted by record; index + 1 gives us the rank (#1, #2, ...) */}
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <div className="mt-3 grid gap-3 sm:grid-cols-1 md:grid-cols-2">
           {(teams ?? []).map((t, index) => (
             <div
               key={t.rosterId}
@@ -1106,11 +1214,18 @@ export default function LeaguePage() {
               Finalize lottery
             </button>
             <button
-              className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 flex items-center gap-2"
               disabled={teams.length === 0 || isCalculatingPermutations}
               onClick={calculateAllPermutations}
               title="Calculate probability distributions for all possible draft order outcomes using Monte Carlo simulation."
+              aria-label={isCalculatingPermutations ? "Calculating permutations" : "Show all permutations"}
             >
+              {isCalculatingPermutations && (
+                <svg className="animate-spin h-4 w-4 text-zinc-100" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              )}
               {isCalculatingPermutations ? "Calculating..." : "Show all permutations"}
             </button>
           </div>
@@ -1183,8 +1298,8 @@ export default function LeaguePage() {
                 </button>
               </div>
               
-              <div className="mt-6 overflow-x-auto">
-                <table className="w-full border-collapse text-sm">
+              <div className="mt-6 overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
+                <table className="w-full border-collapse text-sm min-w-[600px]">
                   <thead>
                     <tr className="border-b border-blue-800/50">
                       <th className="px-3 py-2 text-left text-xs font-semibold text-blue-300 sticky left-0 bg-blue-950/40 z-10">
@@ -1460,19 +1575,28 @@ export default function LeaguePage() {
                         </label>
                       </td>
                       <td className="px-4 py-3">
-                        <input
-                          type="text"
-                          placeholder="e.g., 1.01"
+                        <select
                           value={config.manualSlot || ""}
                           onChange={(e) =>
                             updateLotteryConfig(team.rosterId, {
-                              manualSlot: e.target.value.trim() || undefined,
+                              manualSlot: e.target.value || undefined,
                             })
                           }
                           disabled={!config.isLockedPick}
-                          className="w-24 rounded-lg border border-zinc-800 bg-black px-2 py-1 text-sm text-zinc-100 outline-none focus:border-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="w-32 rounded-lg border border-zinc-800 bg-black px-2 py-1 text-sm text-zinc-100 outline-none focus:border-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Manually assign a specific draft slot (e.g., '1.01' for first overall pick). Only available when 'Locked pick' is enabled."
-                        />
+                        >
+                          <option value="">Select pick...</option>
+                          {Array.from({ length: teams.length }, (_, i) => {
+                            const pick = i + 1;
+                            const slotValue = `1.${String(pick).padStart(2, '0')}`;
+                            return (
+                              <option key={pick} value={slotValue}>
+                                {slotValue}
+                              </option>
+                            );
+                          })}
+                        </select>
                       </td>
                     </tr>
                   );
