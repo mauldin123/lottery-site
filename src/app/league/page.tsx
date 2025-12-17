@@ -169,6 +169,9 @@ export default function LeaguePage() {
   
   // Flag to prevent saving during initial restore
   const isRestoringRef = useRef(false);
+  
+  // Ref for league details section to scroll to after loading
+  const leagueDetailsRef = useRef<HTMLElement | null>(null);
 
   // Look up a Sleeper user by username, then fetch their leagues for the chosen season
   async function findLeaguesByUsername(retryCount: number = 0): Promise<void> {
@@ -398,6 +401,16 @@ export default function LeaguePage() {
       setSelectedLeagueId(id);
       setLeagueInfo(leagueJson.league ?? null);
       setTeams(orderedTeams);
+      
+      // Scroll to league details section after loading
+      setTimeout(() => {
+        if (leagueDetailsRef.current) {
+          leagueDetailsRef.current.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start' 
+          });
+        }
+      }, 100);
     } catch (e: any) {
       const errorMsg = e?.message || "Unexpected error while loading league.";
       setError(`${errorMsg}${retryCount < 2 ? " Retrying..." : ""}`);
@@ -1483,7 +1496,7 @@ export default function LeaguePage() {
       ) : null}
 
       {/* League + teams summary, followed by the per-team cards */}
-      <section className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-6">
+      <section ref={leagueDetailsRef} className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-6">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
             <h2 className="text-2xl font-semibold">League details</h2>
