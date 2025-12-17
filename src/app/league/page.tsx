@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { SkeletonTableRow, SkeletonChart } from "../components/SkeletonLoader";
 
 // Shape of the normalized user payload returned by `/api/sleeper/user/by-username/[username]`
 type UserResult = {
@@ -170,7 +171,7 @@ export default function LeaguePage() {
   const isRestoringRef = useRef(false);
 
   // Look up a Sleeper user by username, then fetch their leagues for the chosen season
-  async function findLeaguesByUsername() {
+  async function findLeaguesByUsername(retryCount: number = 0): Promise<void> {
     setError(null);
     setUsernameError(null);
     setLeagues([]);
@@ -193,9 +194,8 @@ export default function LeaguePage() {
     try {
       setLoadingUser(true);
 
-      const userRes = await fetch(
-        `/api/sleeper/user/by-username/${encodeURIComponent(uname)}`,
-        { cache: "no-store" }
+      const userRes = await fetchWithRetry(
+        `/api/sleeper/user/by-username/${encodeURIComponent(uname)}`
       );
 
       const userJson = (await userRes.json()) as Partial<UserResult> & {
@@ -204,7 +204,11 @@ export default function LeaguePage() {
 
       if (!userRes.ok || !userJson.user?.userId) {
         setFoundUser(null);
-        setError(userJson.error || "User not found on Sleeper.");
+        const errorMsg = userJson.error || "User not found on Sleeper.";
+        setError(errorMsg);
+        if (retryCount < 2 && userRes.status >= 500) {
+          setTimeout(() => findLeaguesByUsername(retryCount + 1), 2000);
+        }
         return;
       }
 
@@ -212,11 +216,10 @@ export default function LeaguePage() {
 
       setLoadingLeagues(true);
 
-      const leaguesRes = await fetch(
+      const leaguesRes = await fetchWithRetry(
         `/api/sleeper/user/${encodeURIComponent(
           userJson.user.userId
-        )}/leagues?season=${encodeURIComponent(season)}&sport=nfl`,
-        { cache: "no-store" }
+        )}/leagues?season=${encodeURIComponent(season)}&sport=nfl`
       );
 
       const leaguesJson = (await leaguesRes.json()) as Partial<LeagueListResult> & {
@@ -225,7 +228,11 @@ export default function LeaguePage() {
 
       if (!leaguesRes.ok || !Array.isArray(leaguesJson.leagues)) {
         setLeagues([]);
-        setError(leaguesJson.error || "Failed to load leagues.");
+        const errorMsg = leaguesJson.error || "Failed to load leagues.";
+        setError(errorMsg);
+        if (retryCount < 2 && leaguesRes.status >= 500) {
+          setTimeout(() => findLeaguesByUsername(retryCount + 1), 2000);
+        }
         return;
       }
 
@@ -234,15 +241,51 @@ export default function LeaguePage() {
         setError("No leagues found for that user in the selected season.");
       }
     } catch (e: any) {
-      setError(e?.message || "Unexpected error while loading leagues.");
+      const errorMsg = e?.message || "Unexpected error while loading leagues.";
+      setError(`${errorMsg}${retryCount < 2 ? " Retrying..." : ""}`);
+      
+      if (retryCount < 2 && (e?.message?.includes("fetch") || e?.message?.includes("network"))) {
+        setTimeout(() => findLeaguesByUsername(retryCount + 1), 2000);
+      }
     } finally {
       setLoadingUser(false);
       setLoadingLeagues(false);
     }
   }
 
+  // Retry helper for API calls
+  async function fetchWithRetry(
+    url: string,
+    options: RequestInit = {},
+    maxRetries: number = 3,
+    retryDelay: number = 1000
+  ): Promise<Response> {
+    let lastError: Error | null = null;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const response = await fetch(url, { ...options, cache: "no-store" });
+        if (response.ok) {
+          return response;
+        }
+        // If it's a 4xx error (client error), don't retry
+        if (response.status >= 400 && response.status < 500) {
+          return response;
+        }
+        lastError = new Error(`HTTP ${response.status}`);
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error("Network error");
+        if (attempt < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay * (attempt + 1)));
+        }
+      }
+    }
+    
+    throw lastError || new Error("Failed after retries");
+  }
+
   // Fetch league details + teams from our Sleeper-backed API by numeric league ID
-  async function loadLeagueById(leagueId: string) {
+  async function loadLeagueById(leagueId: string, retryCount: number = 0): Promise<void> {
     setError(null);
     setLeagueIdError(null);
     setSelectedLeagueId(null);
@@ -265,10 +308,8 @@ export default function LeaguePage() {
       setLoadingLeagueDetails(true);
 
       const [leagueRes, teamsRes] = await Promise.all([
-        fetch(`/api/sleeper/league/${encodeURIComponent(id)}`, { cache: "no-store" }),
-        fetch(`/api/sleeper/league/${encodeURIComponent(id)}/teams`, {
-          cache: "no-store",
-        }),
+        fetchWithRetry(`/api/sleeper/league/${encodeURIComponent(id)}`),
+        fetchWithRetry(`/api/sleeper/league/${encodeURIComponent(id)}/teams`),
       ]);
 
       const leagueJson = (await leagueRes.json()) as Partial<LeagueInfoResult> & {
@@ -279,7 +320,12 @@ export default function LeaguePage() {
       };
 
       if (!leagueRes.ok) {
-        setError(leagueJson.error || "Failed to load league.");
+        const errorMsg = leagueJson.error || "Failed to load league.";
+        setError(errorMsg);
+        if (retryCount < 2 && leagueRes.status >= 500) {
+          // Auto-retry on server errors
+          setTimeout(() => loadLeagueById(leagueId, retryCount + 1), 2000);
+        }
         return;
       }
 
@@ -353,7 +399,13 @@ export default function LeaguePage() {
       setLeagueInfo(leagueJson.league ?? null);
       setTeams(orderedTeams);
     } catch (e: any) {
-      setError(e?.message || "Unexpected error while loading league.");
+      const errorMsg = e?.message || "Unexpected error while loading league.";
+      setError(`${errorMsg}${retryCount < 2 ? " Retrying..." : ""}`);
+      
+      // Auto-retry on network errors
+      if (retryCount < 2 && (e?.message?.includes("fetch") || e?.message?.includes("network"))) {
+        setTimeout(() => loadLeagueById(leagueId, retryCount + 1), 2000);
+      }
     } finally {
       setLoadingLeagueDetails(false);
     }
@@ -1233,8 +1285,8 @@ export default function LeaguePage() {
           </select>
 
           <button
-            className="mt-4 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center gap-2 transition-all"
-            onClick={findLeaguesByUsername}
+            className="mt-4 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center gap-2 transition-all min-h-[44px]"
+            onClick={() => findLeaguesByUsername()}
             disabled={!canFind || loadingUser || loadingLeagues}
             aria-label={loadingUser || loadingLeagues ? "Loading leagues" : "Find leagues"}
           >
@@ -1322,7 +1374,7 @@ export default function LeaguePage() {
           )}
 
           <button
-            className="mt-4 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center gap-2 transition-all"
+            className="mt-4 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center gap-2 transition-all min-h-[44px]"
             onClick={() => loadLeagueById(leagueIdInput)}
             disabled={!canLoadById || loadingLeagueDetails}
             aria-label={loadingLeagueDetails ? "Loading league" : "Load league"}
@@ -1353,11 +1405,38 @@ export default function LeaguePage() {
             </svg>
             <div className="flex-1">
               <h3 className="font-semibold text-red-100 mb-1">Error</h3>
-              <p className="text-sm">{error}</p>
+              <p className="text-sm mb-3">{error}</p>
+              <div className="flex flex-wrap gap-2">
+                {selectedLeagueId && (
+                  <button
+                    onClick={() => loadLeagueById(selectedLeagueId)}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-red-800 bg-red-900/30 text-red-200 hover:bg-red-900/50 transition-colors min-h-[44px] min-w-[44px]"
+                    aria-label="Retry loading league"
+                  >
+                    Retry
+                  </button>
+                )}
+                {username && (
+                  <button
+                    onClick={() => findLeaguesByUsername()}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-red-800 bg-red-900/30 text-red-200 hover:bg-red-900/50 transition-colors min-h-[44px] min-w-[44px]"
+                    aria-label="Retry finding leagues"
+                  >
+                    Retry
+                  </button>
+                )}
+                <button
+                  onClick={() => setError(null)}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-red-800 bg-red-900/30 text-red-200 hover:bg-red-900/50 transition-colors min-h-[44px] min-w-[44px]"
+                  aria-label="Dismiss error"
+                >
+                  Dismiss
+                </button>
+              </div>
             </div>
             <button
               onClick={() => setError(null)}
-              className="text-red-400 hover:text-red-300 transition-colors"
+              className="text-red-400 hover:text-red-300 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
               aria-label="Dismiss error"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1389,42 +1468,59 @@ export default function LeaguePage() {
           )}
         </div>
 
-        <div className="mt-6 grid gap-6 md:grid-cols-2">
-          <div className="rounded-2xl border border-zinc-800 bg-black p-5">
-            <h3 className="text-lg font-semibold text-zinc-100">League</h3>
-            <div className="mt-3 text-sm text-zinc-300">
-              <div>
-                <span className="text-zinc-400">Name:</span>{" "}
-                <span className="text-zinc-100">
-                  {leagueInfo?.name ?? "(not loaded)"}
-                </span>
-              </div>
-              <div className="mt-2">
-                <span className="text-zinc-400">Season:</span>{" "}
-                <span className="text-zinc-100">
-                  {leagueInfo?.season ?? "(not loaded)"}
-                </span>
-              </div>
-              <div className="mt-2">
-                <span className="text-zinc-400">League ID:</span>{" "}
-                <span className="text-zinc-100">{selectedLeagueId ?? "(none)"}</span>
+        {loadingLeagueDetails ? (
+          <div className="mt-6 grid gap-6 md:grid-cols-2">
+            <div className="rounded-2xl border border-zinc-800 bg-black p-5 animate-pulse">
+              <div className="h-6 bg-zinc-800/50 rounded w-24 mb-3"></div>
+              <div className="space-y-3">
+                <div className="h-4 bg-zinc-800/50 rounded w-3/4"></div>
+                <div className="h-4 bg-zinc-800/50 rounded w-2/3"></div>
+                <div className="h-4 bg-zinc-800/50 rounded w-1/2"></div>
               </div>
             </div>
+            <div className="rounded-2xl border border-zinc-800 bg-black p-5 animate-pulse">
+              <div className="h-6 bg-zinc-800/50 rounded w-24 mb-3"></div>
+              <div className="h-4 bg-zinc-800/50 rounded w-2/3"></div>
+            </div>
           </div>
-
-          <div className="rounded-2xl border border-zinc-800 bg-black p-5">
-            <h3 className="text-lg font-semibold text-zinc-100">Teams</h3>
-            <div className="mt-3 text-sm text-zinc-400">
-              {teams.length === 0 ? (
-                <div>(not loaded)</div>
-              ) : (
+        ) : (
+          <div className="mt-6 grid gap-6 md:grid-cols-2">
+            <div className="rounded-2xl border border-zinc-800 bg-black p-5">
+              <h3 className="text-lg font-semibold text-zinc-100">League</h3>
+              <div className="mt-3 text-sm text-zinc-300">
                 <div>
-                  Loaded <span className="text-zinc-100">{teams.length}</span> teams.
+                  <span className="text-zinc-400">Name:</span>{" "}
+                  <span className="text-zinc-100">
+                    {leagueInfo?.name ?? "(not loaded)"}
+                  </span>
                 </div>
-              )}
+                <div className="mt-2">
+                  <span className="text-zinc-400">Season:</span>{" "}
+                  <span className="text-zinc-100">
+                    {leagueInfo?.season ?? "(not loaded)"}
+                  </span>
+                </div>
+                <div className="mt-2">
+                  <span className="text-zinc-400">League ID:</span>{" "}
+                  <span className="text-zinc-100">{selectedLeagueId ?? "(none)"}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-800 bg-black p-5">
+              <h3 className="text-lg font-semibold text-zinc-100">Teams</h3>
+              <div className="mt-3 text-sm text-zinc-400">
+                {teams.length === 0 ? (
+                  <div>(not loaded)</div>
+                ) : (
+                  <div>
+                    Loaded <span className="text-zinc-100">{teams.length}</span> teams.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         <h3 className="mt-8 text-xl font-semibold">Teams</h3>
         {/* Teams are already sorted by record; index + 1 gives us the rank (#1, #2, ...) */}
@@ -1491,7 +1587,7 @@ export default function LeaguePage() {
               {isSimulating ? "Simulating..." : "Simulate draw"}
             </button>
             <button
-              className="rounded-xl border border-emerald-800 bg-emerald-900 px-4 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-xl border border-emerald-800 bg-emerald-900 px-4 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 min-h-[44px]"
               disabled={teams.length === 0}
               onClick={finalizeLottery}
               title="Finalize the lottery configuration and proceed to run the official lottery draw."
@@ -1583,53 +1679,7 @@ export default function LeaguePage() {
                 </button>
               </div>
               
-              {/* Visualization Charts */}
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                {teams.map((team) => {
-                  const teamProbs = permutationResults.get(team.rosterId);
-                  if (!teamProbs || teamProbs.size === 0) return null;
-                  
-                  const probsArray = Array.from(teamProbs.values());
-                  const maxProb = probsArray.length > 0 ? Math.max(...probsArray) : 0;
-                  
-                  // Get top 6 picks by probability
-                  const sortedPicks = Array.from(teamProbs.entries())
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 6);
-                  
-                  return (
-                    <div key={team.rosterId} className="rounded-lg border border-blue-800/50 bg-blue-950/10 p-4">
-                      <h4 className="text-sm font-semibold text-blue-200 mb-3">{team.displayName}</h4>
-                      <div className="space-y-2">
-                        {sortedPicks.map(([pick, prob]) => {
-                          const width = maxProb > 0 ? (prob / maxProb) * 100 : 0;
-                          
-                          return (
-                            <div key={pick} className="flex items-center gap-2">
-                              <span className="text-xs text-blue-300/70 w-12 flex-shrink-0">
-                                1.{String(pick).padStart(2, '0')}
-                              </span>
-                              <div className="flex-1 bg-blue-900/30 rounded-full h-4 overflow-hidden">
-                                <div
-                                  className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all"
-                                  style={{ width: `${width}%` }}
-                                />
-                              </div>
-                              <span className="text-xs text-blue-200 w-12 text-right">
-                                {prob.toFixed(1)}%
-                              </span>
-                            </div>
-                          );
-                        })}
-                        {teamProbs.size > 6 && (
-                          <p className="text-xs text-blue-300/50 mt-2">Showing top 6 picks. See table for full details.</p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
+              {/* Permutation Table */}
               <div className="mt-6 overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
                 <table className="w-full border-collapse text-sm min-w-[600px]">
                   <thead>
@@ -1706,12 +1756,69 @@ export default function LeaguePage() {
               <div className="mt-4 text-xs text-blue-300/70">
                 <p>💡 Hover over cells to see details. Highlighted cells show each team's most likely pick position.</p>
               </div>
+
+              {/* Visualization Charts */}
+              {isCalculatingPermutations ? (
+                <div className="mt-6 grid gap-4 md:grid-cols-2">
+                  {[1, 2, 3, 4].map((i) => (
+                    <SkeletonChart key={i} />
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-6 grid gap-4 grid-cols-1 md:grid-cols-2">
+                  {teams
+                    .filter((team) => {
+                      // Only show teams that have lottery balls
+                      const config = getLotteryConfig(team.rosterId);
+                      return config.includeInLottery && config.balls > 0;
+                    })
+                    .map((team) => {
+                      const teamProbs = permutationResults.get(team.rosterId);
+                      if (!teamProbs || teamProbs.size === 0) return null;
+                      
+                      const probsArray = Array.from(teamProbs.values());
+                      const maxProb = probsArray.length > 0 ? Math.max(...probsArray) : 0;
+                      
+                      // Show all picks in sequential order (1.01 through 1.0x)
+                      const allPicks = Array.from({ length: teams.length }, (_, i) => i + 1);
+                      
+                      return (
+                        <div key={team.rosterId} className="rounded-lg border border-blue-800/50 bg-blue-950/10 p-4">
+                          <h4 className="text-sm font-semibold text-blue-200 mb-3">{team.displayName}</h4>
+                          <div className="space-y-2">
+                            {allPicks.map((pick) => {
+                              const prob = teamProbs.get(pick) ?? 0;
+                              const width = maxProb > 0 ? (prob / maxProb) * 100 : 0;
+                              
+                              return (
+                                <div key={pick} className="flex items-center gap-2">
+                                  <span className="text-xs text-blue-300/70 w-12 flex-shrink-0">
+                                    1.{String(pick).padStart(2, '0')}
+                                  </span>
+                                  <div className="flex-1 bg-blue-900/30 rounded-full h-4 overflow-hidden">
+                                    <div
+                                      className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all"
+                                      style={{ width: `${width}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-xs text-blue-200 w-12 text-right">
+                                    {prob > 0 ? prob.toFixed(1) : '—'}%
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
             </div>
           ) : null}
 
           {/* Team lottery configuration table */}
-          <div className="mt-6 overflow-x-auto">
-            <table className="w-full border-collapse">
+          <div className="mt-6 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <table className="w-full border-collapse text-sm min-w-[700px]">
               <thead>
                 <tr className="border-b border-zinc-800">
                   <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-300">

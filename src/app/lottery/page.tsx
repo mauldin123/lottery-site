@@ -331,7 +331,15 @@ export default function LotteryPage() {
 
         results.sort((a, b) => a.pick - b.pick);
         setFinalResults(results);
-        setRevealedPicks(new Set()); // Reset revealed picks when running new lottery
+        
+        // Auto-reveal locked picks and assigned picks (odds === 0)
+        const autoRevealedPicks = new Set<number>();
+        results.forEach((result) => {
+          if (result.wasLocked || result.odds === 0) {
+            autoRevealedPicks.add(result.pick);
+          }
+        });
+        setRevealedPicks(autoRevealedPicks); // Auto-reveal locked/assigned picks
         setVisiblePicks(new Set()); // Reset visible picks for animation
         setIsSaved(false); // Reset saved state when running new lottery
         setError(null);
@@ -1043,16 +1051,20 @@ export default function LotteryPage() {
                     paddingTop: `${paddingY}px`,
                     paddingBottom: `${paddingY}px`,
                   }}
-                  onClick={() => !isRevealed && revealPick(result.pick)}
+                  onClick={() => {
+                    if (!isRevealed && !result.wasLocked && result.odds > 0) {
+                      revealPick(result.pick);
+                    }
+                  }}
                   onKeyDown={(e) => {
-                    if ((e.key === "Enter" || e.key === " ") && !isRevealed) {
+                    if ((e.key === "Enter" || e.key === " ") && !isRevealed && !result.wasLocked && result.odds > 0) {
                       e.preventDefault();
                       revealPick(result.pick);
                     }
                   }}
-                  tabIndex={!isRevealed ? 0 : -1}
-                  role={!isRevealed ? "button" : undefined}
-                  aria-label={!isRevealed ? `Reveal pick ${result.pick}` : undefined}
+                  tabIndex={(!isRevealed && !result.wasLocked && result.odds > 0) ? 0 : -1}
+                  role={(!isRevealed && !result.wasLocked && result.odds > 0) ? "button" : undefined}
+                  aria-label={(!isRevealed && !result.wasLocked && result.odds > 0) ? `Reveal pick ${result.pick}` : undefined}
                 >
                   <div className="flex items-center gap-4 flex-1">
                     <div 
@@ -1079,8 +1091,8 @@ export default function LotteryPage() {
                           )}
                         </>
                       ) : (
-                        <div className={`font-medium text-emerald-100 blur-md select-none ${fontSize}`}>
-                          Click to reveal
+                        <div className={`font-medium text-emerald-100 ${(result.wasLocked || result.odds === 0) ? '' : 'blur-md'} select-none ${fontSize}`}>
+                          {(result.wasLocked || result.odds === 0) ? result.teamName : 'Click to reveal'}
                         </div>
                       )}
                     </div>
@@ -1091,7 +1103,12 @@ export default function LotteryPage() {
                       {team.record.ties ? `-${team.record.ties}` : ""}
                     </div>
                   )}
-                  {!isRevealed && (
+                  {!isRevealed && (result.wasLocked || result.odds === 0) && (
+                    <div className="text-sm text-emerald-200/80 mt-2 sm:mt-0">
+                      {team ? `${team.record.wins}-${team.record.losses}${team.record.ties ? `-${team.record.ties}` : ""}` : '—-—'}
+                    </div>
+                  )}
+                  {!isRevealed && !result.wasLocked && result.odds > 0 && (
                     <div className="text-sm text-emerald-200/80 blur-md select-none mt-2 sm:mt-0">
                       —-—
                     </div>
