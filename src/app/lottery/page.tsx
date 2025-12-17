@@ -158,6 +158,7 @@ export default function LotteryPage() {
   const [isRunningLottery, setIsRunningLottery] = useState<boolean>(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
   const [visiblePicks, setVisiblePicks] = useState<Set<number>>(new Set());
+  const [lowestLotteryWonPick, setLowestLotteryWonPick] = useState<number | null>(null);
   const resultsSectionRef = useRef<HTMLElement | null>(null);
   
   // Show toast notification
@@ -335,6 +336,13 @@ export default function LotteryPage() {
         setIsSaved(false); // Reset saved state when running new lottery
         setError(null);
         
+        // Find the lowest pick that was won in the lottery (not manually locked)
+        const lotteryWonPicks = results.filter(r => !r.wasLocked);
+        const lowestWon = lotteryWonPicks.length > 0 
+          ? Math.min(...lotteryWonPicks.map(r => r.pick))
+          : null;
+        setLowestLotteryWonPick(lowestWon);
+        
         // Scroll to results section to see the animation
         setTimeout(() => {
           if (resultsSectionRef.current) {
@@ -374,14 +382,42 @@ export default function LotteryPage() {
       return next;
     });
 
-    // Celebrate when revealing the #1 pick!
-    if (pick === 1) {
+    // Celebrate when revealing the lowest lottery-won pick!
+    // If 1.01 and 1.02 are manually locked, confetti goes off on 1.03 (the lowest lottery-won pick)
+    if (lowestLotteryWonPick !== null && pick === lowestLotteryWonPick) {
+      // Bigger confetti celebration!
       confetti({
-        particleCount: 100,
-        spread: 70,
+        particleCount: 200,
+        spread: 100,
         origin: { y: 0.6 },
         colors: ['#FFD700', '#FFA500', '#FFC125', '#DAA520', '#F4A460', '#FFE135'],
+        gravity: 0.8,
+        ticks: 200,
       });
+      
+      // Add a second burst for extra celebration
+      setTimeout(() => {
+        confetti({
+          particleCount: 150,
+          spread: 120,
+          origin: { y: 0.6 },
+          colors: ['#FFD700', '#FFA500', '#FFC125', '#DAA520', '#F4A460', '#FFE135'],
+          gravity: 0.7,
+          ticks: 200,
+        });
+      }, 300);
+      
+      // Add a third burst for maximum celebration!
+      setTimeout(() => {
+        confetti({
+          particleCount: 180,
+          spread: 130,
+          origin: { y: 0.6 },
+          colors: ['#FFD700', '#FFA500', '#FFC125', '#DAA520', '#F4A460', '#FFE135'],
+          gravity: 0.6,
+          ticks: 200,
+        });
+      }, 600);
     }
   }
 
@@ -404,6 +440,7 @@ export default function LotteryPage() {
     setFinalResults(null);
     setRevealedPicks(new Set());
     setVisiblePicks(new Set());
+    setLowestLotteryWonPick(null);
     setIsSaved(false);
     setError(null);
 

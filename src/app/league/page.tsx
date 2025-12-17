@@ -66,11 +66,18 @@ function isNumericId(value: string) {
   return /^\d+$/.test(value.trim());
 }
 
-// Build a small list of season options: next year, this year, and two prior years
+// Build a small list of season options: this year, prior years, and 2022
 function seasonOptions() {
   const now = new Date();
   const year = now.getFullYear();
-  return [year + 1, year, year - 1, year - 2].map(String);
+  const years = [year, year - 1, year - 2];
+  // Add 2022 if it's not already in the list
+  if (!years.includes(2022)) {
+    years.push(2022);
+  }
+  // Sort descending
+  years.sort((a, b) => b - a);
+  return years.map(String);
 }
 
 // Calculate winning percentage, counting ties as half a win
@@ -158,6 +165,9 @@ export default function LeaguePage() {
   
   // Local input state for balls fields (to prevent lag while typing)
   const [ballsInputValues, setBallsInputValues] = useState<Map<number, string>>(new Map());
+  
+  // Flag to prevent saving during initial restore
+  const isRestoringRef = useRef(false);
 
   // Look up a Sleeper user by username, then fetch their leagues for the chosen season
   async function findLeaguesByUsername() {
@@ -1057,6 +1067,107 @@ export default function LeaguePage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [error, toast, teams.length, selectedLeagueId]);
 
+  // Save lottery configuration to localStorage whenever it changes
+  useEffect(() => {
+    // Don't save during initial restore
+    if (isRestoringRef.current) {
+      return;
+    }
+    
+    if (selectedLeagueId && lotteryConfigs.size > 0) {
+      try {
+        const savedData = {
+          selectedLeagueId,
+          lotteryConfigs: Array.from(lotteryConfigs.entries()),
+          ballsInputValues: Array.from(ballsInputValues.entries()),
+          username: foundUser?.username || username,
+          season,
+          timestamp: new Date().toISOString(),
+        };
+        localStorage.setItem("lotteryLeagueConfig", JSON.stringify(savedData));
+      } catch (e) {
+        // Silently fail if localStorage is unavailable
+        console.warn("Failed to save lottery config to localStorage:", e);
+      }
+    }
+  }, [selectedLeagueId, lotteryConfigs, ballsInputValues, foundUser, username, season]);
+
+  // Load saved lottery configuration on mount
+  useEffect(() => {
+    let savedConfigs: Map<number, LotteryTeamConfig> | null = null;
+    let savedInputValues: Map<number, string> | null = null;
+    
+    try {
+      const savedDataStr = localStorage.getItem("lotteryLeagueConfig");
+      if (savedDataStr) {
+        const savedData = JSON.parse(savedDataStr);
+        
+        // Restore basic fields
+        if (savedData.username) {
+          setUsername(savedData.username);
+        }
+        if (savedData.season) {
+          setSeason(savedData.season);
+        }
+        
+        // If we have a saved league ID, restore the lottery configs
+        if (savedData.selectedLeagueId && savedData.lotteryConfigs) {
+          isRestoringRef.current = true; // Prevent saving during restore
+          savedConfigs = new Map<number, LotteryTeamConfig>(savedData.lotteryConfigs);
+          
+          // Restore balls input values
+          if (savedData.ballsInputValues) {
+            savedInputValues = new Map<number, string>(savedData.ballsInputValues);
+          }
+          
+          // Reload the league to get fresh team data
+          loadLeagueById(savedData.selectedLeagueId).then(() => {
+            // After league loads, restore the saved configs
+            // Use setTimeout to ensure state has updated
+            setTimeout(() => {
+              if (savedConfigs) {
+                setLotteryConfigs((currentConfigs) => {
+                  // Merge saved configs with current (saved takes precedence for user changes)
+                  const merged = new Map(currentConfigs);
+                  savedConfigs!.forEach((savedConfig, rosterId) => {
+                    // Only restore if the rosterId exists in current configs (team still exists)
+                    if (merged.has(rosterId)) {
+                      // Preserve user's custom settings
+                      merged.set(rosterId, {
+                        ...savedConfig,
+                        calculatedPercent: 0, // Will be recalculated
+                      });
+                    }
+                  });
+                  // Recalculate percentages with restored configs
+                  return calculatePercentagesFromBalls(merged);
+                });
+              }
+              
+              // Restore input values
+              if (savedInputValues) {
+                setBallsInputValues(savedInputValues);
+              }
+              
+              // Re-enable saving after restore completes
+              setTimeout(() => {
+                isRestoringRef.current = false;
+              }, 500);
+            }, 200);
+          }).catch(() => {
+            // If reload fails, we can't restore (need fresh team data)
+            console.warn("Failed to reload league, cannot restore saved configs");
+            isRestoringRef.current = false;
+          });
+        }
+      }
+    } catch (e) {
+      // Silently fail if localStorage is unavailable or data is corrupted
+      console.warn("Failed to load lottery config from localStorage:", e);
+      isRestoringRef.current = false;
+    }
+  }, []); // Only run on mount
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
       <h1 className="text-4xl font-bold">Load a Sleeper League</h1>
@@ -1098,7 +1209,7 @@ export default function LeaguePage() {
                 findLeaguesByUsername();
               }
             }}
-            placeholder="example: chasennnn"
+            placeholder="example: your username"
             aria-invalid={usernameError ? "true" : "false"}
             aria-describedby={usernameError ? "username-error" : undefined}
           />
