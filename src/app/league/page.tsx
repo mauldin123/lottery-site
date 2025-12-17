@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 // Shape of the normalized user payload returned by `/api/sleeper/user/by-username/[username]`
@@ -146,6 +146,18 @@ export default function LeaguePage() {
   // Permutation analysis results
   const [permutationResults, setPermutationResults] = useState<Map<number, Map<number, number>> | null>(null);
   const [isCalculatingPermutations, setIsCalculatingPermutations] = useState(false);
+  
+  // Toast notification state
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+  
+  // Loading state for simulate draw
+  const [isSimulating, setIsSimulating] = useState(false);
+  
+  // Debounce timer refs
+  const ballsDebounceTimer = useRef<Map<number, NodeJS.Timeout>>(new Map());
+  
+  // Local input state for balls fields (to prevent lag while typing)
+  const [ballsInputValues, setBallsInputValues] = useState<Map<number, string>>(new Map());
 
   // Look up a Sleeper user by username, then fetch their leagues for the chosen season
   async function findLeaguesByUsername() {
@@ -295,7 +307,10 @@ export default function LeaguePage() {
           if (worstRank < nbaDistribution.length) {
             defaultBalls = nbaDistribution[worstRank];
           } else {
-            // For teams beyond the distribution, use a simple decreasing pattern
+            // For teams beyond the distribution, assign unique values
+            // The last value in distribution is 1, so we need to ensure uniqueness
+            // Use: eligibleCount - worstRank, but ensure it's at least 1
+            // This ensures: worstRank=eligibleCount-1 gets 1, worstRank=eligibleCount-2 gets 2, etc.
             defaultBalls = Math.max(1, eligibleCount - worstRank);
           }
         }
@@ -313,6 +328,16 @@ export default function LeaguePage() {
       // Calculate initial percentages
       const configsWithPercentages = calculatePercentagesFromBalls(initialConfigs);
       setLotteryConfigs(configsWithPercentages);
+      
+      // Initialize balls input values
+      const initialInputValues = new Map<number, string>();
+      orderedTeams.forEach((team) => {
+        const config = configsWithPercentages.get(team.rosterId);
+        if (config) {
+          initialInputValues.set(team.rosterId, config.balls === 0 ? "" : String(config.balls));
+        }
+      });
+      setBallsInputValues(initialInputValues);
 
       setSelectedLeagueId(id);
       setLeagueInfo(leagueJson.league ?? null);
@@ -393,6 +418,15 @@ export default function LeaguePage() {
       }
       return updated;
     });
+    
+    // Sync input value when config updates (for external updates)
+    if (updates.balls !== undefined) {
+      setBallsInputValues((prev) => {
+        const updated = new Map(prev);
+        updated.set(rosterId, updates.balls === 0 ? "" : String(updates.balls));
+        return updated;
+      });
+    }
   }
 
   // Get lottery config for a team, with defaults
@@ -531,14 +565,80 @@ export default function LeaguePage() {
     return Math.max(0, Math.min(100, probability * 100));
   }
 
+  // Show toast notification
+  function showToast(message: string, type: "success" | "error" | "info" = "info"): void {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  }
+
+  // Validate lottery configuration
+  function validateLotteryConfig(): { valid: boolean; error: string | null } {
+    // Check for duplicate locked picks
+    const lockedPicks = new Map<number, number>();
+    const duplicatePicks: string[] = [];
+    
+    teams.forEach((team) => {
+      const config = getLotteryConfig(team.rosterId);
+      if (config.isLockedPick && config.manualSlot) {
+        const pickNum = parseManualSlot(config.manualSlot);
+        if (pickNum !== null) {
+          if (lockedPicks.has(pickNum)) {
+            const existingTeam = teams.find((t) => t.rosterId === lockedPicks.get(pickNum));
+            duplicatePicks.push(`Pick 1.${String(pickNum).padStart(2, '0')} is locked to both ${team.displayName} and ${existingTeam?.displayName || 'unknown'}`);
+          } else {
+            lockedPicks.set(pickNum, team.rosterId);
+          }
+        }
+      }
+    });
+    
+    if (duplicatePicks.length > 0) {
+      return { valid: false, error: duplicatePicks[0] };
+    }
+    
+    // Check for invalid manual slots (out of range)
+    for (const team of teams) {
+      const config = getLotteryConfig(team.rosterId);
+      if (config.isLockedPick && config.manualSlot) {
+        const pickNum = parseManualSlot(config.manualSlot);
+        if (pickNum === null || pickNum < 1 || pickNum > teams.length) {
+          return { valid: false, error: `${team.displayName} has an invalid manual slot: ${config.manualSlot}` };
+        }
+      }
+    }
+    
+    // Check for max balls value (prevent unreasonably large numbers)
+    const MAX_BALLS = 10000;
+    for (const config of lotteryConfigs.values()) {
+      if (config.balls > MAX_BALLS) {
+        return { valid: false, error: `Balls value cannot exceed ${MAX_BALLS.toLocaleString()}. Please use a smaller number.` };
+      }
+    }
+    
+    return { valid: true, error: null };
+  }
+
   // Run a single lottery simulation
   function simulateLotteryDraw(): void {
     if (teams.length === 0) {
       setError("No teams loaded. Please load a league first.");
       return;
     }
-
-    // Build map of locked picks: pick number -> rosterId
+    
+    // Validate configuration
+    const validation = validateLotteryConfig();
+    if (!validation.valid) {
+      setError(validation.error || "Invalid lottery configuration.");
+      return;
+    }
+    
+    setIsSimulating(true);
+    setError(null);
+    
+    // Use setTimeout to allow UI to update
+    setTimeout(() => {
+      try {
+        // Build map of locked picks: pick number -> rosterId
     const lockedPicks = new Map<number, number>();
     teams.forEach((team) => {
       const config = getLotteryConfig(team.rosterId);
@@ -570,129 +670,138 @@ export default function LeaguePage() {
       }
     });
 
-    // Need at least some eligible teams OR locked picks to run lottery
-    if (eligibleTeams.length === 0 && lockedPicks.size === 0) {
-      setError("No eligible teams for lottery. Please configure at least one team with balls > 0, or set up locked picks.");
-      return;
-    }
-
-    // Determine how many picks we need (all teams, or just eligible + locked)
-    const totalPicks = teams.length;
-    const results: LotteryResult[] = [];
-
-    // Create a map for quick team lookup
-    const teamMap = new Map<number, TeamsResult["teams"][0]>();
-    teams.forEach((team) => teamMap.set(team.rosterId, team));
-
-    // Track which teams have been assigned
-    const assignedRosterIds = new Set<number>();
-
-    // First, assign all locked picks
-    const sortedLockedPicks = Array.from(lockedPicks.entries()).sort((a, b) => a[0] - b[0]);
-    sortedLockedPicks.forEach(([pickNum, rosterId]) => {
-      const team = teamMap.get(rosterId);
-      if (team) {
-        results.push({
-          pick: pickNum,
-          rosterId,
-          teamName: team.displayName,
-          odds: getLotteryConfig(rosterId).calculatedPercent,
-          wasLocked: true,
-        });
-        assignedRosterIds.add(rosterId);
-      }
-    });
-
-    // Then, draw remaining picks from eligible teams
-    let currentPick = 1;
-    while (results.length < totalPicks) {
-      // Skip if this pick is already locked
-      if (lockedPicks.has(currentPick)) {
-        currentPick++;
-        continue;
-      }
-
-      // Filter out already assigned teams
-      const availableTeams = eligibleTeams.filter(
-        (t) => !assignedRosterIds.has(t.rosterId)
-      );
-
-      if (availableTeams.length === 0) {
-        // No more eligible teams, assign remaining teams in reverse order (worst teams get better picks)
-        const remainingTeams = teams.filter((t) => !assignedRosterIds.has(t.rosterId));
-        if (remainingTeams.length > 0) {
-          // Sort remaining teams by record (worst first) - reverse of the original sort
-          const sortedRemaining = [...remainingTeams].sort((a, b) => {
-            const aW = a.record?.wins ?? 0;
-            const aL = a.record?.losses ?? 0;
-            const aT = a.record?.ties ?? 0;
-            const bW = b.record?.wins ?? 0;
-            const bL = b.record?.losses ?? 0;
-            const bT = b.record?.ties ?? 0;
-            
-            const aPct = winPct(aW, aL, aT);
-            const bPct = winPct(bW, bL, bT);
-            
-            // Reverse order: worst teams first
-            if (aPct !== bPct) return aPct - bPct;
-            if (aW !== bW) return aW - bW;
-            if (bL !== aL) return bL - aL;
-            if (bT !== aT) return bT - aT;
-            return (b.rosterId ?? 0) - (a.rosterId ?? 0);
-          });
-          
-          const team = sortedRemaining[0];
-          results.push({
-            pick: currentPick,
-            rosterId: team.rosterId,
-            teamName: team.displayName,
-            odds: 0,
-            wasLocked: false,
-          });
-          assignedRosterIds.add(team.rosterId);
+        // Need at least some eligible teams OR locked picks to run lottery
+        if (eligibleTeams.length === 0 && lockedPicks.size === 0) {
+          setError("No eligible teams for lottery. Please configure at least one team with balls > 0, or set up locked picks.");
+          setIsSimulating(false);
+          return;
         }
-        currentPick++;
-        continue;
-      }
 
-      // Calculate probability for this specific pick position
-      const totalBalls = availableTeams.reduce((sum, t) => sum + t.balls, 0);
-      
-      // Draw a team
-      const drawnRosterId = weightedRandomDraw(availableTeams);
-      if (drawnRosterId === null) break;
+        // Determine how many picks we need (all teams, or just eligible + locked)
+        const totalPicks = teams.length;
+        const results: LotteryResult[] = [];
 
-      const drawnTeam = teamMap.get(drawnRosterId);
-      if (drawnTeam) {
-        // Calculate the probability this team had BEFORE the lottery to land THIS specific pick
-        const preLotteryOdds = calculatePreLotteryProbability(
-          drawnRosterId,
-          currentPick,
-          eligibleTeams,
-          lockedPicks,
-          totalPicks
-        );
-        
-        results.push({
-          pick: currentPick,
-          rosterId: drawnRosterId,
-          teamName: drawnTeam.displayName,
-          odds: Math.round(preLotteryOdds * 10) / 10, // Probability BEFORE lottery to land this specific pick
-          wasLocked: false,
+        // Create a map for quick team lookup
+        const teamMap = new Map<number, TeamsResult["teams"][0]>();
+        teams.forEach((team) => teamMap.set(team.rosterId, team));
+
+        // Track which teams have been assigned
+        const assignedRosterIds = new Set<number>();
+
+        // First, assign all locked picks
+        const sortedLockedPicks = Array.from(lockedPicks.entries()).sort((a, b) => a[0] - b[0]);
+        sortedLockedPicks.forEach(([pickNum, rosterId]) => {
+          const team = teamMap.get(rosterId);
+          if (team) {
+            results.push({
+              pick: pickNum,
+              rosterId,
+              teamName: team.displayName,
+              odds: getLotteryConfig(rosterId).calculatedPercent,
+              wasLocked: true,
+            });
+            assignedRosterIds.add(rosterId);
+          }
         });
-        assignedRosterIds.add(drawnRosterId);
+
+        // Then, draw remaining picks from eligible teams
+        let currentPick = 1;
+        while (results.length < totalPicks) {
+          // Skip if this pick is already locked
+          if (lockedPicks.has(currentPick)) {
+            currentPick++;
+            continue;
+          }
+
+          // Filter out already assigned teams
+          const availableTeams = eligibleTeams.filter(
+            (t) => !assignedRosterIds.has(t.rosterId)
+          );
+
+          if (availableTeams.length === 0) {
+            // No more eligible teams, assign remaining teams in reverse order (worst teams get better picks)
+            const remainingTeams = teams.filter((t) => !assignedRosterIds.has(t.rosterId));
+            if (remainingTeams.length > 0) {
+              // Sort remaining teams by record (worst first) - reverse of the original sort
+              const sortedRemaining = [...remainingTeams].sort((a, b) => {
+                const aW = a.record?.wins ?? 0;
+                const aL = a.record?.losses ?? 0;
+                const aT = a.record?.ties ?? 0;
+                const bW = b.record?.wins ?? 0;
+                const bL = b.record?.losses ?? 0;
+                const bT = b.record?.ties ?? 0;
+                
+                const aPct = winPct(aW, aL, aT);
+                const bPct = winPct(bW, bL, bT);
+                
+                // Reverse order: worst teams first
+                if (aPct !== bPct) return aPct - bPct;
+                if (aW !== bW) return aW - bW;
+                if (bL !== aL) return bL - aL;
+                if (bT !== aT) return bT - aT;
+                return (b.rosterId ?? 0) - (a.rosterId ?? 0);
+              });
+              
+              const team = sortedRemaining[0];
+              results.push({
+                pick: currentPick,
+                rosterId: team.rosterId,
+                teamName: team.displayName,
+                odds: 0,
+                wasLocked: false,
+              });
+              assignedRosterIds.add(team.rosterId);
+            }
+            currentPick++;
+            continue;
+          }
+
+          // Calculate probability for this specific pick position
+          const totalBalls = availableTeams.reduce((sum, t) => sum + t.balls, 0);
+          
+          // Draw a team
+          const drawnRosterId = weightedRandomDraw(availableTeams);
+          if (drawnRosterId === null) break;
+
+          const drawnTeam = teamMap.get(drawnRosterId);
+          if (drawnTeam) {
+            // Calculate the probability this team had BEFORE the lottery to land THIS specific pick
+            const preLotteryOdds = calculatePreLotteryProbability(
+              drawnRosterId,
+              currentPick,
+              eligibleTeams,
+              lockedPicks,
+              totalPicks
+            );
+            
+            results.push({
+              pick: currentPick,
+              rosterId: drawnRosterId,
+              teamName: drawnTeam.displayName,
+              odds: Math.round(preLotteryOdds * 10) / 10, // Probability BEFORE lottery to land this specific pick
+              wasLocked: false,
+            });
+            assignedRosterIds.add(drawnRosterId);
+          }
+
+          currentPick++;
+        }
+
+        // Sort results by pick number
+        results.sort((a, b) => a.pick - b.pick);
+        setLotteryResults(results);
+        setError(null);
+        showToast("Lottery simulation completed!", "success");
+      } catch (e: any) {
+        setError("Failed to simulate lottery. " + (e?.message || ""));
+        showToast("Simulation failed. Please check your configuration.", "error");
+      } finally {
+        setIsSimulating(false);
       }
-
-      currentPick++;
-    }
-
-    // Sort results by pick number
-    results.sort((a, b) => a.pick - b.pick);
-    setLotteryResults(results);
-    setError(null);
+    }, 50);
   }
 
-  // Calculate all permutations using Monte Carlo simulation
+  // Calculate all permutations using simulation
   function calculateAllPermutations(): void {
     if (teams.length === 0) {
       setError("No teams loaded. Please load a league first.");
@@ -841,9 +950,11 @@ export default function LeaguePage() {
 
         setPermutationResults(probabilities);
         setIsCalculatingPermutations(false);
+        showToast("Probability analysis completed!", "success");
       } catch (e: any) {
         setError("Failed to calculate permutations. " + (e?.message || ""));
         setIsCalculatingPermutations(false);
+        showToast("Failed to calculate permutations.", "error");
       }
     }, 100);
   }
@@ -857,6 +968,13 @@ export default function LeaguePage() {
 
     if (!selectedLeagueId) {
       setError("No league selected.");
+      return;
+    }
+
+    // Validate configuration
+    const validation = validateLotteryConfig();
+    if (!validation.valid) {
+      setError(validation.error || "Invalid lottery configuration.");
       return;
     }
 
@@ -884,11 +1002,60 @@ export default function LeaguePage() {
 
     try {
       sessionStorage.setItem("lotteryFinalizeData", JSON.stringify(lotteryData));
-      router.push("/lottery");
+      showToast("Lottery configuration finalized! Redirecting...", "success");
+      setTimeout(() => {
+        router.push("/lottery");
+      }, 500);
     } catch (e: any) {
       setError("Failed to save lottery configuration. " + (e?.message || ""));
+      showToast("Failed to save configuration.", "error");
     }
   }
+  
+  // Debounced update for balls input
+  const debouncedUpdateBalls = useCallback((rosterId: number, balls: number) => {
+    // Clear existing timer for this team
+    const existingTimer = ballsDebounceTimer.current.get(rosterId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+    
+    // Set new timer
+    const timer = setTimeout(() => {
+      updateLotteryConfig(rosterId, { balls });
+      ballsDebounceTimer.current.delete(rosterId);
+    }, 500); // 500ms debounce (increased to reduce calculations)
+    
+    ballsDebounceTimer.current.set(rosterId, timer);
+  }, []);
+  
+  // Cleanup debounce timers on unmount
+  useEffect(() => {
+    return () => {
+      ballsDebounceTimer.current.forEach((timer) => clearTimeout(timer));
+      ballsDebounceTimer.current.clear();
+    };
+  }, []);
+  
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Escape to dismiss errors/toasts
+      if (e.key === "Escape") {
+        if (error) setError(null);
+        if (toast) setToast(null);
+      }
+      
+      // Ctrl/Cmd + Enter to finalize lottery (when teams are loaded)
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && teams.length > 0 && selectedLeagueId) {
+        e.preventDefault();
+        finalizeLottery();
+      }
+    };
+    
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [error, toast, teams.length, selectedLeagueId]);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
@@ -1198,12 +1365,19 @@ export default function LeaguePage() {
           {/* Action buttons */}
           <div className="mt-6 flex flex-wrap gap-3">
             <button
-              className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={teams.length === 0}
+              className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 flex items-center gap-2"
+              disabled={teams.length === 0 || isSimulating}
               onClick={simulateLotteryDraw}
               title="Run a single random lottery simulation to see one possible outcome of the draft order draw."
+              aria-label={isSimulating ? "Simulating lottery" : "Simulate draw"}
             >
-              Simulate draw
+              {isSimulating && (
+                <svg className="animate-spin h-4 w-4 text-zinc-100" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              )}
+              {isSimulating ? "Simulating..." : "Simulate draw"}
             </button>
             <button
               className="rounded-xl border border-emerald-800 bg-emerald-900 px-4 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
@@ -1217,7 +1391,7 @@ export default function LeaguePage() {
               className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 flex items-center gap-2"
               disabled={teams.length === 0 || isCalculatingPermutations}
               onClick={calculateAllPermutations}
-              title="Calculate probability distributions for all possible draft order outcomes using Monte Carlo simulation."
+              title="Calculate probability distributions for all possible draft order outcomes using simulation."
               aria-label={isCalculatingPermutations ? "Calculating permutations" : "Show all permutations"}
             >
               {isCalculatingPermutations && (
@@ -1287,7 +1461,7 @@ export default function LeaguePage() {
                 <div>
                   <h3 className="text-xl font-semibold text-blue-100">Probability Distribution Analysis</h3>
                   <p className="mt-1 text-sm text-blue-200/80">
-                    Based on 10,000 Monte Carlo simulations. Shows the probability each team lands each pick.
+                    Based on 10,000 simulations. Shows the probability each team lands each pick.
                   </p>
                 </div>
                 <button
@@ -1488,9 +1662,15 @@ export default function LeaguePage() {
                                 // Calculate balls using NBA-style distribution
                                 const nbaDistribution = [140, 140, 125, 105, 90, 75, 60, 45, 30, 20, 15, 10, 5, 1];
                                 const worstRank = eligibleCount - 1 - teamRank;
-                                const defaultBalls = worstRank < nbaDistribution.length
-                                  ? nbaDistribution[worstRank]
-                                  : Math.max(1, eligibleCount - worstRank);
+                                let defaultBalls;
+                                if (worstRank < nbaDistribution.length) {
+                                  defaultBalls = nbaDistribution[worstRank];
+                                } else {
+                                  // For teams beyond the distribution, assign unique values
+                                  // The last value in distribution is 1, so we need to ensure uniqueness
+                                  // Use: eligibleCount - worstRank, but ensure it's at least 1
+                                  defaultBalls = Math.max(1, eligibleCount - worstRank);
+                                }
                                 
                                 updateLotteryConfig(team.rosterId, {
                                   includeInLottery,
@@ -1512,15 +1692,20 @@ export default function LeaguePage() {
                           type="text"
                           inputMode="numeric"
                           pattern="[0-9]*"
-                          value={config.balls === 0 ? "" : String(config.balls)}
+                          value={ballsInputValues.get(team.rosterId) ?? (config.balls === 0 ? "" : String(config.balls))}
                           onChange={(e) => {
                             const inputValue = e.target.value;
                             
+                            // Update local state immediately for instant feedback
+                            setBallsInputValues((prev) => {
+                              const updated = new Map(prev);
+                              updated.set(team.rosterId, inputValue);
+                              return updated;
+                            });
+                            
                             // Allow empty string while typing
                             if (inputValue === "") {
-                              updateLotteryConfig(team.rosterId, {
-                                balls: 0,
-                              });
+                              debouncedUpdateBalls(team.rosterId, 0);
                               return;
                             }
                             
@@ -1531,17 +1716,73 @@ export default function LeaguePage() {
                             
                             const numValue = parseInt(inputValue, 10);
                             if (!isNaN(numValue) && numValue >= 0) {
-                              updateLotteryConfig(team.rosterId, {
-                                balls: numValue,
-                              });
+                              // Validate max value
+                              const MAX_BALLS = 10000;
+                              if (numValue > MAX_BALLS) {
+                                setError(`Balls value cannot exceed ${MAX_BALLS.toLocaleString()}.`);
+                                return;
+                              }
+                              debouncedUpdateBalls(team.rosterId, numValue);
                             }
                           }}
                           onBlur={(e) => {
                             // On blur, ensure we have a valid number (default to 0 if empty)
                             const inputValue = e.target.value.trim();
+                            
+                            // Clear any pending debounce
+                            const existingTimer = ballsDebounceTimer.current.get(team.rosterId);
+                            if (existingTimer) {
+                              clearTimeout(existingTimer);
+                              ballsDebounceTimer.current.delete(team.rosterId);
+                            }
+                            
                             if (inputValue === "") {
+                              setBallsInputValues((prev) => {
+                                const updated = new Map(prev);
+                                updated.set(team.rosterId, "");
+                                return updated;
+                              });
                               updateLotteryConfig(team.rosterId, {
                                 balls: 0,
+                              });
+                            } else {
+                              // Validate and update immediately on blur
+                              const numValue = parseInt(inputValue, 10);
+                              if (!isNaN(numValue) && numValue >= 0) {
+                                const MAX_BALLS = 10000;
+                                if (numValue <= MAX_BALLS) {
+                                  updateLotteryConfig(team.rosterId, {
+                                    balls: numValue,
+                                  });
+                                } else {
+                                  // Reset to max if exceeded
+                                  setBallsInputValues((prev) => {
+                                    const updated = new Map(prev);
+                                    updated.set(team.rosterId, String(MAX_BALLS));
+                                    return updated;
+                                  });
+                                  updateLotteryConfig(team.rosterId, {
+                                    balls: MAX_BALLS,
+                                  });
+                                  setError(`Balls value cannot exceed ${MAX_BALLS.toLocaleString()}.`);
+                                }
+                              } else {
+                                // Invalid input, reset to current config value
+                                setBallsInputValues((prev) => {
+                                  const updated = new Map(prev);
+                                  updated.set(team.rosterId, config.balls === 0 ? "" : String(config.balls));
+                                  return updated;
+                                });
+                              }
+                            }
+                          }}
+                          onFocus={(e) => {
+                            // Initialize local state on focus if not already set
+                            if (!ballsInputValues.has(team.rosterId)) {
+                              setBallsInputValues((prev) => {
+                                const updated = new Map(prev);
+                                updated.set(team.rosterId, config.balls === 0 ? "" : String(config.balls));
+                                return updated;
                               });
                             }
                           }}
@@ -1577,11 +1818,28 @@ export default function LeaguePage() {
                       <td className="px-4 py-3">
                         <select
                           value={config.manualSlot || ""}
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            const slotValue = e.target.value || undefined;
                             updateLotteryConfig(team.rosterId, {
-                              manualSlot: e.target.value || undefined,
-                            })
-                          }
+                              manualSlot: slotValue,
+                            });
+                            
+                            // Validate slot immediately
+                            if (slotValue) {
+                              const pickNum = parseManualSlot(slotValue);
+                              if (pickNum === null || pickNum < 1 || pickNum > teams.length) {
+                                setError(`Invalid manual slot: ${slotValue}. Must be between 1.01 and 1.${String(teams.length).padStart(2, '0')}`);
+                              } else {
+                                // Check for duplicates
+                                const validation = validateLotteryConfig();
+                                if (!validation.valid && validation.error) {
+                                  setError(validation.error);
+                                } else {
+                                  setError(null);
+                                }
+                              }
+                            }
+                          }}
                           disabled={!config.isLockedPick}
                           className="w-32 rounded-lg border border-zinc-800 bg-black px-2 py-1 text-sm text-zinc-100 outline-none focus:border-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Manually assign a specific draft slot (e.g., '1.01' for first overall pick). Only available when 'Locked pick' is enabled."
@@ -1606,6 +1864,55 @@ export default function LeaguePage() {
           </div>
         </section>
       ) : null}
+      
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className="fixed bottom-4 right-4 z-50 rounded-xl border px-5 py-4 shadow-lg transition-all animate-in slide-in-from-bottom-2"
+          style={{
+            backgroundColor: toast.type === "success" 
+              ? "rgba(16, 185, 129, 0.95)" 
+              : toast.type === "error"
+              ? "rgba(239, 68, 68, 0.95)"
+              : "rgba(59, 130, 246, 0.95)",
+            borderColor: toast.type === "success"
+              ? "rgba(5, 150, 105, 0.6)"
+              : toast.type === "error"
+              ? "rgba(220, 38, 38, 0.6)"
+              : "rgba(37, 99, 235, 0.6)",
+          }}
+          role="alert"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-3">
+            {toast.type === "success" && (
+              <svg className="w-5 h-5 text-white flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            )}
+            {toast.type === "error" && (
+              <svg className="w-5 h-5 text-white flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            )}
+            {toast.type === "info" && (
+              <svg className="w-5 h-5 text-white flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            )}
+            <p className="text-sm font-medium text-white">{toast.message}</p>
+            <button
+              onClick={() => setToast(null)}
+              className="text-white/80 hover:text-white transition-colors ml-2"
+              aria-label="Dismiss notification"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

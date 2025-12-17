@@ -155,6 +155,14 @@ export default function LotteryPage() {
   const [finalResults, setFinalResults] = useState<LotteryResult[] | null>(null);
   const [revealedPicks, setRevealedPicks] = useState<Set<number>>(new Set());
   const [isSaved, setIsSaved] = useState<boolean>(false);
+  const [isRunningLottery, setIsRunningLottery] = useState<boolean>(false);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+  
+  // Show toast notification
+  function showToast(message: string, type: "success" | "error" | "info" = "info"): void {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  }
 
   useEffect(() => {
     // Load lottery data from sessionStorage
@@ -177,145 +185,160 @@ export default function LotteryPage() {
       setError("No lottery configuration loaded.");
       return;
     }
-
-    const { teams, lotteryConfigs: configEntries } = lotteryData;
-    const lotteryConfigs = new Map<number, LotteryTeamConfig>(configEntries);
-
-    // Build map of locked picks
-    const lockedPicks = new Map<number, number>();
-    teams.forEach((team) => {
-      const config = lotteryConfigs.get(team.rosterId);
-      if (config?.isLockedPick && config.manualSlot) {
-        const pickNum = parseManualSlot(config.manualSlot);
-        if (pickNum !== null) {
-          lockedPicks.set(pickNum, team.rosterId);
-        }
-      }
-    });
-
-    // Get all eligible teams
-    const eligibleTeams: Array<{
-      rosterId: number;
-      balls: number;
-      teamName: string;
-    }> = [];
-
-    teams.forEach((team) => {
-      const config = lotteryConfigs.get(team.rosterId);
-      if (config?.includeInLottery && !config.isLockedPick && config.balls > 0) {
-        eligibleTeams.push({
-          rosterId: team.rosterId,
-          balls: config.balls,
-          teamName: team.displayName,
-        });
-      }
-    });
-
-    if (eligibleTeams.length === 0 && lockedPicks.size === 0) {
-      setError("No eligible teams for lottery.");
-      return;
-    }
-
-    const totalPicks = teams.length;
-    const results: LotteryResult[] = [];
-    const teamMap = new Map<number, TeamsResult["teams"][0]>();
-    teams.forEach((team) => teamMap.set(team.rosterId, team));
-    const assignedRosterIds = new Set<number>();
-
-    // Assign locked picks
-    const sortedLockedPicks = Array.from(lockedPicks.entries()).sort((a, b) => a[0] - b[0]);
-    sortedLockedPicks.forEach(([pickNum, rosterId]) => {
-      const team = teamMap.get(rosterId);
-      if (team) {
-        results.push({
-          pick: pickNum,
-          rosterId,
-          teamName: team.displayName,
-          odds: lotteryConfigs.get(rosterId)?.calculatedPercent ?? 0,
-          wasLocked: true,
-        });
-        assignedRosterIds.add(rosterId);
-      }
-    });
-
-    // Draw remaining picks
-    let currentPick = 1;
-    while (results.length < totalPicks) {
-      if (lockedPicks.has(currentPick)) {
-        currentPick++;
-        continue;
-      }
-
-      const availableTeams = eligibleTeams.filter(
-        (t) => !assignedRosterIds.has(t.rosterId)
-      );
-
-      if (availableTeams.length === 0) {
-        const remainingTeams = teams.filter((t) => !assignedRosterIds.has(t.rosterId));
-        if (remainingTeams.length > 0) {
-          const sortedRemaining = [...remainingTeams].sort((a, b) => {
-            const aW = a.record?.wins ?? 0;
-            const aL = a.record?.losses ?? 0;
-            const aT = a.record?.ties ?? 0;
-            const bW = b.record?.wins ?? 0;
-            const bL = b.record?.losses ?? 0;
-            const bT = b.record?.ties ?? 0;
-            
-            const aPct = winPct(aW, aL, aT);
-            const bPct = winPct(bW, bL, bT);
-            
-            if (aPct !== bPct) return aPct - bPct;
-            if (aW !== bW) return aW - bW;
-            if (bL !== aL) return bL - aL;
-            if (bT !== aT) return bT - aT;
-            return (b.rosterId ?? 0) - (a.rosterId ?? 0);
-          });
-          
-          const team = sortedRemaining[0];
-          results.push({
-            pick: currentPick,
-            rosterId: team.rosterId,
-            teamName: team.displayName,
-            odds: 0,
-            wasLocked: false,
-          });
-          assignedRosterIds.add(team.rosterId);
-        }
-        currentPick++;
-        continue;
-      }
-
-      const drawnRosterId = weightedRandomDraw(availableTeams);
-      if (drawnRosterId === null) break;
-
-      const drawnTeam = teamMap.get(drawnRosterId);
-      if (drawnTeam) {
-        const preLotteryOdds = calculatePreLotteryProbability(
-          drawnRosterId,
-          currentPick,
-          eligibleTeams,
-          lockedPicks,
-          totalPicks
-        );
-        
-        results.push({
-          pick: currentPick,
-          rosterId: drawnRosterId,
-          teamName: drawnTeam.displayName,
-          odds: Math.round(preLotteryOdds * 10) / 10,
-          wasLocked: false,
-        });
-        assignedRosterIds.add(drawnRosterId);
-      }
-
-      currentPick++;
-    }
-
-    results.sort((a, b) => a.pick - b.pick);
-    setFinalResults(results);
-    setRevealedPicks(new Set()); // Reset revealed picks when running new lottery
-    setIsSaved(false); // Reset saved state when running new lottery
+    
+    setIsRunningLottery(true);
     setError(null);
+    
+    // Use setTimeout to allow UI to update
+    setTimeout(() => {
+      try {
+        const { teams, lotteryConfigs: configEntries } = lotteryData;
+        const lotteryConfigs = new Map<number, LotteryTeamConfig>(configEntries);
+
+        // Build map of locked picks
+        const lockedPicks = new Map<number, number>();
+        teams.forEach((team) => {
+          const config = lotteryConfigs.get(team.rosterId);
+          if (config?.isLockedPick && config.manualSlot) {
+            const pickNum = parseManualSlot(config.manualSlot);
+            if (pickNum !== null) {
+              lockedPicks.set(pickNum, team.rosterId);
+            }
+          }
+        });
+
+        // Get all eligible teams
+        const eligibleTeams: Array<{
+          rosterId: number;
+          balls: number;
+          teamName: string;
+        }> = [];
+
+        teams.forEach((team) => {
+          const config = lotteryConfigs.get(team.rosterId);
+          if (config?.includeInLottery && !config.isLockedPick && config.balls > 0) {
+            eligibleTeams.push({
+              rosterId: team.rosterId,
+              balls: config.balls,
+              teamName: team.displayName,
+            });
+          }
+        });
+
+        if (eligibleTeams.length === 0 && lockedPicks.size === 0) {
+          setError("No eligible teams for lottery.");
+          setIsRunningLottery(false);
+          return;
+        }
+
+        const totalPicks = teams.length;
+        const results: LotteryResult[] = [];
+        const teamMap = new Map<number, TeamsResult["teams"][0]>();
+        teams.forEach((team) => teamMap.set(team.rosterId, team));
+        const assignedRosterIds = new Set<number>();
+
+        // Assign locked picks
+        const sortedLockedPicks = Array.from(lockedPicks.entries()).sort((a, b) => a[0] - b[0]);
+        sortedLockedPicks.forEach(([pickNum, rosterId]) => {
+          const team = teamMap.get(rosterId);
+          if (team) {
+            results.push({
+              pick: pickNum,
+              rosterId,
+              teamName: team.displayName,
+              odds: lotteryConfigs.get(rosterId)?.calculatedPercent ?? 0,
+              wasLocked: true,
+            });
+            assignedRosterIds.add(rosterId);
+          }
+        });
+
+        // Draw remaining picks
+        let currentPick = 1;
+        while (results.length < totalPicks) {
+          if (lockedPicks.has(currentPick)) {
+            currentPick++;
+            continue;
+          }
+
+          const availableTeams = eligibleTeams.filter(
+            (t) => !assignedRosterIds.has(t.rosterId)
+          );
+
+          if (availableTeams.length === 0) {
+            const remainingTeams = teams.filter((t) => !assignedRosterIds.has(t.rosterId));
+            if (remainingTeams.length > 0) {
+              const sortedRemaining = [...remainingTeams].sort((a, b) => {
+                const aW = a.record?.wins ?? 0;
+                const aL = a.record?.losses ?? 0;
+                const aT = a.record?.ties ?? 0;
+                const bW = b.record?.wins ?? 0;
+                const bL = b.record?.losses ?? 0;
+                const bT = b.record?.ties ?? 0;
+                
+                const aPct = winPct(aW, aL, aT);
+                const bPct = winPct(bW, bL, bT);
+                
+                if (aPct !== bPct) return aPct - bPct;
+                if (aW !== bW) return aW - bW;
+                if (bL !== aL) return bL - aL;
+                if (bT !== aT) return bT - aT;
+                return (b.rosterId ?? 0) - (a.rosterId ?? 0);
+              });
+              
+              const team = sortedRemaining[0];
+              results.push({
+                pick: currentPick,
+                rosterId: team.rosterId,
+                teamName: team.displayName,
+                odds: 0,
+                wasLocked: false,
+              });
+              assignedRosterIds.add(team.rosterId);
+            }
+            currentPick++;
+            continue;
+          }
+
+          const drawnRosterId = weightedRandomDraw(availableTeams);
+          if (drawnRosterId === null) break;
+
+          const drawnTeam = teamMap.get(drawnRosterId);
+          if (drawnTeam) {
+            const preLotteryOdds = calculatePreLotteryProbability(
+              drawnRosterId,
+              currentPick,
+              eligibleTeams,
+              lockedPicks,
+              totalPicks
+            );
+            
+            results.push({
+              pick: currentPick,
+              rosterId: drawnRosterId,
+              teamName: drawnTeam.displayName,
+              odds: Math.round(preLotteryOdds * 10) / 10,
+              wasLocked: false,
+            });
+            assignedRosterIds.add(drawnRosterId);
+          }
+
+          currentPick++;
+        }
+
+        results.sort((a, b) => a.pick - b.pick);
+        setFinalResults(results);
+        setRevealedPicks(new Set()); // Reset revealed picks when running new lottery
+        setIsSaved(false); // Reset saved state when running new lottery
+        setError(null);
+        showToast("Lottery draw completed! Click picks to reveal.", "success");
+      } catch (e: any) {
+        setError("Failed to run lottery. " + (e?.message || ""));
+        showToast("Failed to run lottery.", "error");
+      } finally {
+        setIsRunningLottery(false);
+      }
+    }, 50);
   }
 
   function revealPick(pick: number): void {
@@ -429,8 +452,10 @@ export default function LotteryPage() {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       setError(null);
+      showToast("Results exported as JSON!", "success");
     } catch (e: any) {
       setError("Failed to export JSON. " + (e?.message || ""));
+      showToast("Failed to export JSON.", "error");
     }
   }
 
@@ -469,10 +494,26 @@ export default function LotteryPage() {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       setError(null);
+      showToast("Results exported as CSV!", "success");
     } catch (e: any) {
       setError("Failed to export CSV. " + (e?.message || ""));
+      showToast("Failed to export CSV.", "error");
     }
   }
+  
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Escape to dismiss errors/toasts
+      if (e.key === "Escape") {
+        if (error) setError(null);
+        if (toast) setToast(null);
+      }
+    };
+    
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [error, toast]);
 
   if (error && !lotteryData) {
     return (
@@ -673,10 +714,16 @@ export default function LotteryPage() {
           <button
             className="rounded-xl border border-emerald-800 bg-emerald-900 px-6 py-3 text-lg font-medium text-emerald-100 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 transition-all flex items-center gap-2"
             onClick={runFinalLottery}
-            disabled={finalResults !== null}
-            aria-label={finalResults ? "Lottery already run" : "Run final lottery"}
+            disabled={finalResults !== null || isRunningLottery}
+            aria-label={finalResults ? "Lottery already run" : isRunningLottery ? "Running lottery" : "Run final lottery"}
           >
-            {finalResults ? "Lottery Already Run" : "Run Final Lottery"}
+            {isRunningLottery && (
+              <svg className="animate-spin h-5 w-5 text-emerald-100" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            )}
+            {isRunningLottery ? "Running Lottery..." : finalResults ? "Lottery Already Run" : "Run Final Lottery"}
           </button>
         </div>
       </section>
@@ -819,6 +866,55 @@ export default function LotteryPage() {
           </div>
         </section>
       ) : null}
+      
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className="fixed bottom-4 right-4 z-50 rounded-xl border px-5 py-4 shadow-lg transition-all animate-in slide-in-from-bottom-2"
+          style={{
+            backgroundColor: toast.type === "success" 
+              ? "rgba(16, 185, 129, 0.95)" 
+              : toast.type === "error"
+              ? "rgba(239, 68, 68, 0.95)"
+              : "rgba(59, 130, 246, 0.95)",
+            borderColor: toast.type === "success"
+              ? "rgba(5, 150, 105, 0.6)"
+              : toast.type === "error"
+              ? "rgba(220, 38, 38, 0.6)"
+              : "rgba(37, 99, 235, 0.6)",
+          }}
+          role="alert"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-3">
+            {toast.type === "success" && (
+              <svg className="w-5 h-5 text-white flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            )}
+            {toast.type === "error" && (
+              <svg className="w-5 h-5 text-white flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            )}
+            {toast.type === "info" && (
+              <svg className="w-5 h-5 text-white flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            )}
+            <p className="text-sm font-medium text-white">{toast.message}</p>
+            <button
+              onClick={() => setToast(null)}
+              className="text-white/80 hover:text-white transition-colors ml-2"
+              aria-label="Dismiss notification"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
