@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import confetti from "canvas-confetti";
@@ -157,6 +157,8 @@ export default function LotteryPage() {
   const [isSaved, setIsSaved] = useState<boolean>(false);
   const [isRunningLottery, setIsRunningLottery] = useState<boolean>(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+  const [visiblePicks, setVisiblePicks] = useState<Set<number>>(new Set());
+  const resultsSectionRef = useRef<HTMLElement | null>(null);
   
   // Show toast notification
   function showToast(message: string, type: "success" | "error" | "info" = "info"): void {
@@ -329,8 +331,32 @@ export default function LotteryPage() {
         results.sort((a, b) => a.pick - b.pick);
         setFinalResults(results);
         setRevealedPicks(new Set()); // Reset revealed picks when running new lottery
+        setVisiblePicks(new Set()); // Reset visible picks for animation
         setIsSaved(false); // Reset saved state when running new lottery
         setError(null);
+        
+        // Scroll to results section to see the animation
+        setTimeout(() => {
+          if (resultsSectionRef.current) {
+            resultsSectionRef.current.scrollIntoView({ 
+              behavior: 'smooth', 
+              block: 'start' 
+            });
+          }
+        }, 100);
+        
+        // Start the ball machine animation sequence - picks appear one by one in reverse order (last to first)
+        const reversedResults = [...results].reverse(); // Reverse order: last pick to first pick
+        reversedResults.forEach((result, index) => {
+          setTimeout(() => {
+            setVisiblePicks((prev) => {
+              const next = new Set(prev);
+              next.add(result.pick);
+              return next;
+            });
+          }, index * 300); // 300ms delay between each pick appearing
+        });
+        
         showToast("Lottery draw completed! Click picks to reveal.", "success");
       } catch (e: any) {
         setError("Failed to run lottery. " + (e?.message || ""));
@@ -377,6 +403,7 @@ export default function LotteryPage() {
     setLotteryData(null);
     setFinalResults(null);
     setRevealedPicks(new Set());
+    setVisiblePicks(new Set());
     setIsSaved(false);
     setError(null);
 
@@ -730,7 +757,7 @@ export default function LotteryPage() {
 
       {/* Final Results */}
       {finalResults && finalResults.length > 0 ? (
-        <section className="mt-10 rounded-2xl border border-emerald-800 bg-emerald-950/20 p-6">
+        <section ref={resultsSectionRef} className="mt-10 rounded-2xl border border-emerald-800 bg-emerald-950/20 p-6">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
             <div>
               <h2 className="text-2xl font-semibold text-emerald-100">Final Lottery Results</h2>
@@ -776,6 +803,7 @@ export default function LotteryPage() {
             {finalResults.map((result) => {
               const team = teams.find((t) => t.rosterId === result.rosterId);
               const isRevealed = revealedPicks.has(result.pick);
+              const isVisible = visiblePicks.has(result.pick);
               
               // Calculate grandeur factor: 1.0 for pick 1, scales down to ~0.6 for last pick
               const maxPick = finalResults.length;
@@ -800,7 +828,11 @@ export default function LotteryPage() {
                     isRevealed 
                       ? "cursor-default" 
                       : "cursor-pointer hover:bg-emerald-950/60 hover:border-emerald-700/70"
-                  } ${glowIntensity ? `shadow-lg ${glowIntensity}` : ''}`}
+                  } ${glowIntensity ? `shadow-lg ${glowIntensity}` : ''} ${
+                    isVisible 
+                      ? "animate-ball-drop opacity-100" 
+                      : "opacity-0 -translate-y-8 pointer-events-none"
+                  }`}
                   style={{
                     paddingLeft: `${paddingX}px`,
                     paddingRight: `${paddingX}px`,
