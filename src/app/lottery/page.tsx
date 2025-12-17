@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import confetti from "canvas-confetti";
 
 // Types matching the league page
 type TeamsResult = {
@@ -320,6 +321,16 @@ export default function LotteryPage() {
       next.add(pick);
       return next;
     });
+
+    // Celebrate when revealing the #1 pick!
+    if (pick === 1) {
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#FFD700', '#FFA500', '#FFC125', '#DAA520', '#F4A460', '#FFE135'],
+      });
+    }
   }
 
   function revealAllPicks(): void {

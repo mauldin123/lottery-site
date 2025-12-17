@@ -1092,13 +1092,6 @@ export default function LeaguePage() {
             <button
               className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={teams.length === 0}
-              title="Calculate the probability percentage for each eligible team to win each draft pick based on their odds weights. Higher weights = better odds."
-            >
-              Calculate lottery odds
-            </button>
-            <button
-              className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={teams.length === 0}
               onClick={simulateLotteryDraw}
               title="Run a single random lottery simulation to see one possible outcome of the draft order draw."
             >
