@@ -1076,27 +1076,36 @@ export default function LotteryPage() {
                     >
                       1.{String(result.pick).padStart(2, '0')}
                     </div>
-                    {team?.avatar ? (
-                      <img 
-                        src={team.avatar} 
-                        alt={`${result.teamName} avatar`}
-                        className="w-10 h-10 rounded-full border border-emerald-700 object-cover flex-shrink-0"
-                        onError={(e) => {
-                          // On error, replace with fallback
-                          const parent = (e.target as HTMLImageElement).parentElement;
-                          if (parent) {
-                            const fallback = document.createElement('div');
-                            fallback.className = 'w-10 h-10 rounded-full border border-emerald-700 bg-emerald-900/50 flex items-center justify-center text-emerald-300 text-sm font-medium flex-shrink-0';
-                            fallback.textContent = result.teamName.charAt(0).toUpperCase();
-                            parent.replaceChild(fallback, e.target as HTMLImageElement);
-                          }
-                        }}
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full border border-emerald-700 bg-emerald-900/50 flex items-center justify-center text-emerald-300 text-sm font-medium flex-shrink-0">
-                        {result.teamName.charAt(0).toUpperCase()}
-                      </div>
-                    )}
+                    <div className={`relative w-10 h-10 flex-shrink-0 ${
+                      !isRevealed && !result.wasLocked && result.odds > 0 ? 'blur-md' : ''
+                    }`}>
+                      {team?.avatar ? (
+                        <img 
+                          src={team.avatar} 
+                          alt={`${result.teamName} avatar`}
+                          className="w-10 h-10 rounded-full border border-emerald-700 object-cover"
+                          onError={(e) => {
+                            // On error, replace with fallback
+                            const parent = (e.target as HTMLImageElement).parentElement;
+                            if (parent) {
+                              const fallback = document.createElement('div');
+                              fallback.className = 'w-10 h-10 rounded-full border border-emerald-700 bg-emerald-900/50 flex items-center justify-center text-emerald-300 text-sm font-medium';
+                              fallback.textContent = result.teamName.charAt(0).toUpperCase();
+                              parent.replaceChild(fallback, e.target as HTMLImageElement);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full border border-emerald-700 bg-emerald-900/50 flex items-center justify-center text-emerald-300 text-sm font-medium">
+                          {result.teamName.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      {!isRevealed && !result.wasLocked && result.odds > 0 && (
+                        <div className="absolute inset-0 w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center select-none">
+                          <div className="w-6 h-6 rounded-full bg-zinc-800"></div>
+                        </div>
+                      )}
+                    </div>
                     <div className="flex-1 relative">
                       {isRevealed ? (
                         <>
