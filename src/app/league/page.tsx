@@ -41,6 +41,16 @@ type TeamsResult = {
   }>;
 };
 
+// Lottery configuration for a single team
+type LotteryTeamConfig = {
+  rosterId: number;
+  includeInLottery: boolean;
+  balls: number; // Number of lottery balls/combinations (primary input)
+  calculatedPercent: number; // Calculated percentage chance based on balls
+  isLockedPick: boolean;
+  manualSlot?: string; // e.g., "1.01", "1.02"
+};
+
 // Helper to validate that a string is only digits (Sleeper league IDs are numeric)
 function isNumericId(value: string) {
   return /^\d+$/.test(value.trim());
@@ -111,6 +121,11 @@ export default function LeaguePage() {
 
   const [leagueInfo, setLeagueInfo] = useState<any | null>(null);
   const [teams, setTeams] = useState<TeamsResult["teams"]>([]);
+  
+  // Lottery configuration state: map of rosterId -> LotteryTeamConfig
+  const [lotteryConfigs, setLotteryConfigs] = useState<Map<number, LotteryTeamConfig>>(
+    new Map()
+  );
 
   // Look up a Sleeper user by username, then fetch their leagues for the chosen season
   async function findLeaguesByUsername() {
@@ -119,6 +134,7 @@ export default function LeaguePage() {
     setSelectedLeagueId(null);
     setLeagueInfo(null);
     setTeams([]);
+    setLotteryConfigs(new Map());
 
     const uname = username.trim();
     if (!uname) {
@@ -183,6 +199,7 @@ export default function LeaguePage() {
     setSelectedLeagueId(null);
     setLeagueInfo(null);
     setTeams([]);
+    setLotteryConfigs(new Map());
 
     const id = leagueId.trim();
     if (!id) {
@@ -219,6 +236,56 @@ export default function LeaguePage() {
       const rawTeams = Array.isArray(teamsJson.teams) ? teamsJson.teams : [];
       const orderedTeams = sortTeamsByRecord(rawTeams);
 
+      // Initialize lottery configs: auto-detect eligibility based on playoff status
+      const initialConfigs = new Map<number, LotteryTeamConfig>();
+      const eligibleTeams = orderedTeams.filter((t) => !t.madePlayoffs);
+      const eligibleCount = eligibleTeams.length;
+      
+      // Pre-fill balls based on reverse order of standings (worst teams get more balls)
+      // Use NBA-style distribution: worst team gets most balls, decreasing for better teams
+      // Base distribution: worst gets 140, then 140, 125, 105, 90, 75, 60, 45, 30, 20, 15, 10, 5, 1
+      // For smaller leagues, scale proportionally
+      const nbaDistribution = [140, 140, 125, 105, 90, 75, 60, 45, 30, 20, 15, 10, 5, 1];
+      
+      orderedTeams.forEach((team) => {
+        // Default: missed playoffs = eligible, playoff teams = not eligible
+        const includeInLottery = !team.madePlayoffs;
+        
+        let defaultBalls = 0;
+        if (includeInLottery) {
+          // Find rank among eligible teams (0 = best, eligibleCount-1 = worst)
+          const eligibleRank = orderedTeams
+            .filter((t) => !t.madePlayoffs)
+            .findIndex((t) => t.rosterId === team.rosterId);
+          
+          // Worst team (highest rank number) should get most balls
+          // eligibleRank 0 = best team, eligibleRank (eligibleCount-1) = worst team
+          // Reverse the rank: worstRank = eligibleCount - 1 - eligibleRank
+          const worstRank = eligibleCount - 1 - eligibleRank;
+          
+          // Use NBA distribution if we have enough teams, otherwise scale down
+          if (worstRank < nbaDistribution.length) {
+            defaultBalls = nbaDistribution[worstRank];
+          } else {
+            // For teams beyond the distribution, use a simple decreasing pattern
+            defaultBalls = Math.max(1, eligibleCount - worstRank);
+          }
+        }
+        
+        initialConfigs.set(team.rosterId, {
+          rosterId: team.rosterId,
+          includeInLottery,
+          balls: defaultBalls,
+          calculatedPercent: 0, // Will be calculated
+          isLockedPick: false,
+          manualSlot: undefined,
+        });
+      });
+      
+      // Calculate initial percentages
+      const configsWithPercentages = calculatePercentagesFromBalls(initialConfigs);
+      setLotteryConfigs(configsWithPercentages);
+
       setSelectedLeagueId(id);
       setLeagueInfo(leagueJson.league ?? null);
       setTeams(orderedTeams);
@@ -237,6 +304,82 @@ export default function LeaguePage() {
   // Simple derived flags to enable/disable buttons
   const canFind = username.trim().length > 0 && !loadingUser && !loadingLeagues;
   const canLoadById = leagueIdInput.trim().length > 0 && !loadingLeagueDetails;
+
+  // Calculate percentages for all teams based on their balls
+  function calculatePercentagesFromBalls(
+    configs: Map<number, LotteryTeamConfig>
+  ): Map<number, LotteryTeamConfig> {
+    const updated = new Map(configs);
+    
+    // Get all eligible teams and their balls
+    const eligibleTeams: Array<{ rosterId: number; balls: number }> = [];
+    let totalBalls = 0;
+    
+    configs.forEach((config, rosterId) => {
+      if (config.includeInLottery && !config.isLockedPick) {
+        eligibleTeams.push({ rosterId, balls: config.balls });
+        totalBalls += config.balls;
+      }
+    });
+
+    // Calculate percentage for each team based on their balls
+    eligibleTeams.forEach(({ rosterId, balls }) => {
+      const config = updated.get(rosterId);
+      if (config && totalBalls > 0) {
+        // Calculate percentage: (balls / totalBalls) * 100
+        const percent = Math.round((balls / totalBalls) * 100);
+        updated.set(rosterId, { ...config, calculatedPercent: percent });
+      } else if (config) {
+        updated.set(rosterId, { ...config, calculatedPercent: 0 });
+      }
+    });
+
+    // Set percentage to 0 for excluded or locked teams
+    configs.forEach((config, rosterId) => {
+      if (!config.includeInLottery || config.isLockedPick) {
+        const existing = updated.get(rosterId);
+        if (existing) {
+          updated.set(rosterId, { ...existing, calculatedPercent: 0, balls: 0 });
+        }
+      }
+    });
+
+    return updated;
+  }
+
+  // Update lottery config for a specific team
+  function updateLotteryConfig(
+    rosterId: number,
+    updates: Partial<LotteryTeamConfig>
+  ) {
+    setLotteryConfigs((prev) => {
+      const updated = new Map(prev);
+      const current = updated.get(rosterId);
+      if (current) {
+        const newConfig = { ...current, ...updates };
+        updated.set(rosterId, newConfig);
+        
+        // Recalculate percentages whenever balls or eligibility changes
+        const recalculated = calculatePercentagesFromBalls(updated);
+        return recalculated;
+      }
+      return updated;
+    });
+  }
+
+  // Get lottery config for a team, with defaults
+  function getLotteryConfig(rosterId: number): LotteryTeamConfig {
+    return (
+      lotteryConfigs.get(rosterId) ?? {
+        rosterId,
+        includeInLottery: false,
+        balls: 0,
+        calculatedPercent: 0,
+        isLockedPick: false,
+        manualSlot: undefined,
+      }
+    );
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
@@ -430,6 +573,239 @@ export default function LeaguePage() {
           ))}
         </div>
       </section>
+
+      {/* Lottery Setup section - only show when teams are loaded */}
+      {teams.length > 0 ? (
+        <section className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-6">
+          <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold">Lottery Setup</h2>
+              <p className="mt-1 text-sm text-zinc-400">
+                Configure which teams are eligible for the lottery and their odds weights.
+              </p>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="mt-6 flex flex-wrap gap-3">
+            <button
+              className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={teams.length === 0}
+              title="Calculate the probability percentage for each eligible team to win each draft pick based on their odds weights. Higher weights = better odds."
+            >
+              Calculate lottery odds
+            </button>
+            <button
+              className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={teams.length === 0}
+              title="Run a single random lottery simulation to see one possible outcome of the draft order draw."
+            >
+              Simulate draw
+            </button>
+            <button
+              className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={teams.length === 0}
+              title="Display all possible draft order combinations and their probabilities based on the current lottery configuration."
+            >
+              Show all permutations
+            </button>
+          </div>
+
+          {/* Team lottery configuration table */}
+          <div className="mt-6 overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="border-b border-zinc-800">
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-300">
+                    Team
+                  </th>
+                  <th
+                    className="px-4 py-3 text-left text-sm font-semibold text-zinc-300 cursor-help"
+                    title="Whether this team participates in the lottery draw. Teams that missed playoffs are included by default, but you can override this for any team."
+                  >
+                    Include in lottery
+                  </th>
+                  <th
+                    className="px-4 py-3 text-left text-sm font-semibold text-zinc-300 cursor-help"
+                    title="The number of lottery balls (combinations) assigned to this team. More balls = better odds. Like the NBA lottery system, where worse teams get more balls."
+                  >
+                    Balls
+                  </th>
+                  <th
+                    className="px-4 py-3 text-left text-sm font-semibold text-zinc-300 cursor-help"
+                    title="The calculated percentage chance this team has in the lottery, based on their balls divided by the total balls in the pool. This is automatically computed."
+                  >
+                    Odds %
+                  </th>
+                  <th
+                    className="px-4 py-3 text-left text-sm font-semibold text-zinc-300 cursor-help"
+                    title="Lock this team to a specific draft position, removing them from the lottery draw. Use this for trades, penalties, expansion teams, or special circumstances."
+                  >
+                    Locked pick
+                  </th>
+                  <th
+                    className="px-4 py-3 text-left text-sm font-semibold text-zinc-300 cursor-help"
+                    title="Manually assign a specific draft slot (e.g., '1.01' for first overall pick). Only available when 'Locked pick' is enabled."
+                  >
+                    Manual slot
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {teams.map((team, index) => {
+                  const config = getLotteryConfig(team.rosterId);
+                  return (
+                    <tr
+                      key={team.rosterId}
+                      className="border-b border-zinc-800/50 hover:bg-zinc-900/30"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-zinc-100">
+                            #{index + 1}
+                          </span>
+                          <span className="text-sm text-zinc-300">
+                            {team.displayName}
+                          </span>
+                          {team.madePlayoffs ? (
+                            <span className="rounded-full bg-emerald-900/40 px-2 py-0.5 text-xs font-medium text-emerald-300 border border-emerald-700/60">
+                              Playoff
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-zinc-900 px-2 py-0.5 text-xs text-zinc-400 border border-zinc-800">
+                              Missed
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <label className="flex items-center cursor-help" title="Whether this team participates in the lottery draw. Teams that missed playoffs are included by default, but you can override this for any team.">
+                          <input
+                            type="checkbox"
+                            checked={config.includeInLottery}
+                            onChange={(e) => {
+                              const includeInLottery = e.target.checked;
+                              
+                              if (includeInLottery && config.balls === 0) {
+                                // Recalculate balls when including a team
+                                const eligibleTeams = teams.filter(
+                                  (t) =>
+                                    (t.rosterId === team.rosterId && includeInLottery) ||
+                                    (t.rosterId !== team.rosterId &&
+                                      getLotteryConfig(t.rosterId).includeInLottery &&
+                                      !getLotteryConfig(t.rosterId).isLockedPick)
+                                );
+                                
+                                // Sort by record (best to worst, same as orderedTeams)
+                                const sortedEligible = [...eligibleTeams].sort((a, b) => {
+                                  const aW = a.record?.wins ?? 0;
+                                  const aL = a.record?.losses ?? 0;
+                                  const aT = a.record?.ties ?? 0;
+                                  const bW = b.record?.wins ?? 0;
+                                  const bL = b.record?.losses ?? 0;
+                                  const bT = b.record?.ties ?? 0;
+                                  
+                                  const aPct = winPct(aW, aL, aT);
+                                  const bPct = winPct(bW, bL, bT);
+                                  
+                                  if (bPct !== aPct) return bPct - aPct;
+                                  if (bW !== aW) return bW - aW;
+                                  if (aL !== bL) return aL - bL;
+                                  return (a.rosterId ?? 0) - (b.rosterId ?? 0);
+                                });
+                                
+                                const eligibleCount = sortedEligible.length;
+                                const teamRank = sortedEligible.findIndex(
+                                  (t) => t.rosterId === team.rosterId
+                                );
+                                
+                                // Calculate balls using NBA-style distribution
+                                const nbaDistribution = [140, 140, 125, 105, 90, 75, 60, 45, 30, 20, 15, 10, 5, 1];
+                                const worstRank = eligibleCount - 1 - teamRank;
+                                const defaultBalls = worstRank < nbaDistribution.length
+                                  ? nbaDistribution[worstRank]
+                                  : Math.max(1, eligibleCount - worstRank);
+                                
+                                updateLotteryConfig(team.rosterId, {
+                                  includeInLottery,
+                                  balls: defaultBalls,
+                                });
+                              } else {
+                                updateLotteryConfig(team.rosterId, {
+                                  includeInLottery,
+                                  balls: includeInLottery ? config.balls : 0,
+                                });
+                              }
+                            }}
+                            className="h-4 w-4 rounded border-zinc-700 bg-black text-zinc-100 focus:ring-2 focus:ring-zinc-600"
+                          />
+                        </label>
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={config.balls ?? 0}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            if (!isNaN(val) && val >= 0) {
+                              updateLotteryConfig(team.rosterId, {
+                                balls: val,
+                              });
+                            }
+                          }}
+                          className="w-20 rounded-lg border border-zinc-800 bg-black px-2 py-1 text-sm text-zinc-100 outline-none focus:border-zinc-600"
+                          disabled={!config.includeInLottery}
+                          title="The number of lottery balls (combinations) assigned to this team. More balls = better odds. Like the NBA lottery system, where worse teams get more balls."
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-sm text-zinc-300">
+                          {config.calculatedPercent ?? 0}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <label className="flex items-center cursor-help" title="Lock this team to a specific draft position, removing them from the lottery draw. Use this for trades, penalties, expansion teams, or special circumstances.">
+                          <input
+                            type="checkbox"
+                            checked={config.isLockedPick}
+                            onChange={(e) =>
+                              updateLotteryConfig(team.rosterId, {
+                                isLockedPick: e.target.checked,
+                                // Clear manual slot if unchecking locked pick
+                                manualSlot: e.target.checked
+                                  ? config.manualSlot
+                                  : undefined,
+                              })
+                            }
+                            className="h-4 w-4 rounded border-zinc-700 bg-black text-zinc-100 focus:ring-2 focus:ring-zinc-600"
+                          />
+                        </label>
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="text"
+                          placeholder="e.g., 1.01"
+                          value={config.manualSlot || ""}
+                          onChange={(e) =>
+                            updateLotteryConfig(team.rosterId, {
+                              manualSlot: e.target.value.trim() || undefined,
+                            })
+                          }
+                          disabled={!config.isLockedPick}
+                          className="w-24 rounded-lg border border-zinc-800 bg-black px-2 py-1 text-sm text-zinc-100 outline-none focus:border-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Manually assign a specific draft slot (e.g., '1.01' for first overall pick). Only available when 'Locked pick' is enabled."
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

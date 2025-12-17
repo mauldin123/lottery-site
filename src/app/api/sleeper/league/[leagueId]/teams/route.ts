@@ -29,8 +29,8 @@ export async function GET(
   _req: Request,
   context: { params: Promise<{ leagueId: string }> }
 ) {
-  const { leagueId: raw } = await context.params;
-  const leagueId = decodeURIComponent(raw ?? "").trim();
+  const params = await context.params;
+  const leagueId = decodeURIComponent(params.leagueId ?? "").trim();
 
   if (!leagueId || !/^\d+$/.test(leagueId)) {
     return NextResponse.json(

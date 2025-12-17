@@ -4,8 +4,8 @@ export async function GET(
   _req: Request,
   context: { params: Promise<{ leagueId: string }> }
 ) {
-  const { leagueId: rawLeagueId } = await context.params;
-  const leagueId = decodeURIComponent(rawLeagueId ?? "").trim();
+  const params = await context.params;
+  const leagueId = decodeURIComponent(params.leagueId ?? "").trim();
 
   if (!leagueId) {
     return NextResponse.json({ error: "Missing leagueId." }, { status: 400 });

@@ -11,8 +11,8 @@ export async function GET(
   _req: Request,
   context: { params: Promise<{ username: string }> }
 ) {
-  const { username: rawUsername } = await context.params;
-  const username = decodeURIComponent(rawUsername ?? "").trim();
+  const params = await context.params;
+  const username = decodeURIComponent(params.username ?? "").trim();
 
   if (!username) {
     return NextResponse.json({ error: "Username is required." }, { status: 400 });

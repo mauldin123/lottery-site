@@ -13,8 +13,8 @@ export async function GET(
   req: Request,
   context: { params: Promise<{ userId: string }> }
 ) {
-  const { userId: rawUserId } = await context.params;
-  const userId = decodeURIComponent(rawUserId ?? "").trim();
+  const params = await context.params;
+  const userId = decodeURIComponent(params.userId ?? "").trim();
 
   if (!userId) {
     return NextResponse.json({ error: "Missing userId." }, { status: 400 });
