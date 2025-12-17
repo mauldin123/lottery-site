@@ -51,6 +51,15 @@ type LotteryTeamConfig = {
   manualSlot?: string; // e.g., "1.01", "1.02"
 };
 
+// Result of a single lottery draw
+type LotteryResult = {
+  pick: number; // 1, 2, 3, etc. (draft position)
+  rosterId: number;
+  teamName: string;
+  odds: number; // Percentage odds at time of draw
+  wasLocked: boolean;
+};
+
 // Helper to validate that a string is only digits (Sleeper league IDs are numeric)
 function isNumericId(value: string) {
   return /^\d+$/.test(value.trim());
@@ -127,6 +136,9 @@ export default function LeaguePage() {
     new Map()
   );
 
+  // Lottery simulation results
+  const [lotteryResults, setLotteryResults] = useState<LotteryResult[] | null>(null);
+
   // Look up a Sleeper user by username, then fetch their leagues for the chosen season
   async function findLeaguesByUsername() {
     setError(null);
@@ -135,6 +147,7 @@ export default function LeaguePage() {
     setLeagueInfo(null);
     setTeams([]);
     setLotteryConfigs(new Map());
+    setLotteryResults(null);
 
     const uname = username.trim();
     if (!uname) {
@@ -200,6 +213,7 @@ export default function LeaguePage() {
     setLeagueInfo(null);
     setTeams([]);
     setLotteryConfigs(new Map());
+    setLotteryResults(null);
 
     const id = leagueId.trim();
     if (!id) {
@@ -379,6 +393,289 @@ export default function LeaguePage() {
         manualSlot: undefined,
       }
     );
+  }
+
+  // Parse manual slot string (e.g., "1.01" or "1.1") to pick number
+  function parseManualSlot(slot: string): number | null {
+    const match = slot.match(/^(\d+)\.(\d+)$/);
+    if (!match) return null;
+    const round = parseInt(match[1], 10);
+    const pick = parseInt(match[2], 10);
+    // For now, assume single round - just use the pick number
+    // Could be extended to handle multi-round drafts
+    return pick;
+  }
+
+  // Run a weighted random draw from eligible teams
+  function weightedRandomDraw(
+    eligibleTeams: Array<{ rosterId: number; balls: number }>
+  ): number | null {
+    const totalBalls = eligibleTeams.reduce((sum, team) => sum + team.balls, 0);
+    if (totalBalls === 0) return null;
+
+    const random = Math.random() * totalBalls;
+    let cumulative = 0;
+
+    for (const team of eligibleTeams) {
+      cumulative += team.balls;
+      if (random <= cumulative) {
+        return team.rosterId;
+      }
+    }
+
+    // Fallback (shouldn't happen)
+    return eligibleTeams[eligibleTeams.length - 1]?.rosterId ?? null;
+  }
+
+  // Calculate the probability that a specific team gets a specific pick position
+  // BEFORE the lottery is run, given the initial configuration
+  function calculatePreLotteryProbability(
+    targetRosterId: number,
+    targetPick: number,
+    eligibleTeams: Array<{ rosterId: number; balls: number }>,
+    lockedPicks: Map<number, number>,
+    totalPicks: number
+  ): number {
+    // If the team is locked to a different pick, probability is 0
+    const lockedPickForTeam = Array.from(lockedPicks.entries()).find(([_, rid]) => rid === targetRosterId)?.[0];
+    if (lockedPickForTeam !== undefined && lockedPickForTeam !== targetPick) {
+      return 0;
+    }
+
+    // If the target pick is locked to a different team, probability is 0
+    if (lockedPicks.has(targetPick)) {
+      const lockedTeam = lockedPicks.get(targetPick);
+      if (lockedTeam !== targetRosterId) {
+        return 0;
+      }
+      // If it's locked to this team, probability is 100% (but we'll handle this separately)
+      return 100;
+    }
+
+    const teamBalls = eligibleTeams.find((t) => t.rosterId === targetRosterId)?.balls ?? 0;
+    if (teamBalls === 0) return 0;
+
+    // Calculate probability step by step
+    // P(get pick k) = P(not get 1..k-1) * P(get k | not got 1..k-1)
+    
+    let probability = 1.0;
+    let remainingBalls = eligibleTeams.reduce((sum, t) => sum + t.balls, 0);
+    const processedLockedPicks = new Set<number>();
+    
+    // Calculate probability of not getting each pick before targetPick
+    for (let pick = 1; pick < targetPick; pick++) {
+      // Skip locked picks
+      if (lockedPicks.has(pick)) {
+        const lockedTeamId = lockedPicks.get(pick)!;
+        const lockedTeam = eligibleTeams.find((t) => t.rosterId === lockedTeamId);
+        if (lockedTeam && !processedLockedPicks.has(pick)) {
+          remainingBalls -= lockedTeam.balls;
+          processedLockedPicks.add(pick);
+        }
+        continue;
+      }
+
+      if (remainingBalls === 0 || teamBalls === 0) {
+        return 0;
+      }
+
+      // Probability of NOT getting this pick (someone else gets it)
+      const probNotGetThisPick = 1 - (teamBalls / remainingBalls);
+      probability *= probNotGetThisPick;
+
+      // After this pick, one of the OTHER teams gets it (not target team)
+      // We need to account for the expected reduction in the pool
+      const otherTeamsBalls = remainingBalls - teamBalls;
+      if (otherTeamsBalls > 0) {
+        // Simplified approximation: remove average balls from other teams
+        // This approximates the expected reduction when a random other team gets the pick
+        const otherTeams = eligibleTeams.filter((t) => 
+          t.rosterId !== targetRosterId && 
+          !Array.from(lockedPicks.values()).includes(t.rosterId)
+        );
+        if (otherTeams.length > 0) {
+          // Average balls per other team
+          const avgOtherBalls = otherTeamsBalls / otherTeams.length;
+          // Remove one team's worth of balls (simplified - represents one team getting picked)
+          remainingBalls = teamBalls + (otherTeamsBalls - avgOtherBalls);
+        } else {
+          return 0; // No other teams
+        }
+      } else {
+        return 0; // No other teams, shouldn't happen
+      }
+    }
+
+    // Now calculate probability of getting the target pick
+    if (remainingBalls === 0 || teamBalls === 0) {
+      return 0;
+    }
+
+    const probGetTargetPick = teamBalls / remainingBalls;
+    probability *= probGetTargetPick;
+
+    return Math.max(0, Math.min(100, probability * 100));
+  }
+
+  // Run a single lottery simulation
+  function simulateLotteryDraw(): void {
+    if (teams.length === 0) {
+      setError("No teams loaded. Please load a league first.");
+      return;
+    }
+
+    // Build map of locked picks: pick number -> rosterId
+    const lockedPicks = new Map<number, number>();
+    teams.forEach((team) => {
+      const config = getLotteryConfig(team.rosterId);
+      if (config.isLockedPick && config.manualSlot) {
+        const pickNum = parseManualSlot(config.manualSlot);
+        if (pickNum !== null) {
+          lockedPicks.set(pickNum, team.rosterId);
+        }
+      }
+    });
+
+    // Get all eligible teams (included in lottery, not locked)
+    const eligibleTeams: Array<{
+      rosterId: number;
+      balls: number;
+      teamName: string;
+      odds: number;
+    }> = [];
+
+    teams.forEach((team) => {
+      const config = getLotteryConfig(team.rosterId);
+      if (config.includeInLottery && !config.isLockedPick && config.balls > 0) {
+        eligibleTeams.push({
+          rosterId: team.rosterId,
+          balls: config.balls,
+          teamName: team.displayName,
+          odds: config.calculatedPercent,
+        });
+      }
+    });
+
+    // Need at least some eligible teams OR locked picks to run lottery
+    if (eligibleTeams.length === 0 && lockedPicks.size === 0) {
+      setError("No eligible teams for lottery. Please configure at least one team with balls > 0, or set up locked picks.");
+      return;
+    }
+
+    // Determine how many picks we need (all teams, or just eligible + locked)
+    const totalPicks = teams.length;
+    const results: LotteryResult[] = [];
+
+    // Create a map for quick team lookup
+    const teamMap = new Map<number, TeamsResult["teams"][0]>();
+    teams.forEach((team) => teamMap.set(team.rosterId, team));
+
+    // Track which teams have been assigned
+    const assignedRosterIds = new Set<number>();
+
+    // First, assign all locked picks
+    const sortedLockedPicks = Array.from(lockedPicks.entries()).sort((a, b) => a[0] - b[0]);
+    sortedLockedPicks.forEach(([pickNum, rosterId]) => {
+      const team = teamMap.get(rosterId);
+      if (team) {
+        results.push({
+          pick: pickNum,
+          rosterId,
+          teamName: team.displayName,
+          odds: getLotteryConfig(rosterId).calculatedPercent,
+          wasLocked: true,
+        });
+        assignedRosterIds.add(rosterId);
+      }
+    });
+
+    // Then, draw remaining picks from eligible teams
+    let currentPick = 1;
+    while (results.length < totalPicks) {
+      // Skip if this pick is already locked
+      if (lockedPicks.has(currentPick)) {
+        currentPick++;
+        continue;
+      }
+
+      // Filter out already assigned teams
+      const availableTeams = eligibleTeams.filter(
+        (t) => !assignedRosterIds.has(t.rosterId)
+      );
+
+      if (availableTeams.length === 0) {
+        // No more eligible teams, assign remaining teams in reverse order (worst teams get better picks)
+        const remainingTeams = teams.filter((t) => !assignedRosterIds.has(t.rosterId));
+        if (remainingTeams.length > 0) {
+          // Sort remaining teams by record (worst first) - reverse of the original sort
+          const sortedRemaining = [...remainingTeams].sort((a, b) => {
+            const aW = a.record?.wins ?? 0;
+            const aL = a.record?.losses ?? 0;
+            const aT = a.record?.ties ?? 0;
+            const bW = b.record?.wins ?? 0;
+            const bL = b.record?.losses ?? 0;
+            const bT = b.record?.ties ?? 0;
+            
+            const aPct = winPct(aW, aL, aT);
+            const bPct = winPct(bW, bL, bT);
+            
+            // Reverse order: worst teams first
+            if (aPct !== bPct) return aPct - bPct;
+            if (aW !== bW) return aW - bW;
+            if (bL !== aL) return bL - aL;
+            if (bT !== aT) return bT - aT;
+            return (b.rosterId ?? 0) - (a.rosterId ?? 0);
+          });
+          
+          const team = sortedRemaining[0];
+          results.push({
+            pick: currentPick,
+            rosterId: team.rosterId,
+            teamName: team.displayName,
+            odds: 0,
+            wasLocked: false,
+          });
+          assignedRosterIds.add(team.rosterId);
+        }
+        currentPick++;
+        continue;
+      }
+
+      // Calculate probability for this specific pick position
+      const totalBalls = availableTeams.reduce((sum, t) => sum + t.balls, 0);
+      
+      // Draw a team
+      const drawnRosterId = weightedRandomDraw(availableTeams);
+      if (drawnRosterId === null) break;
+
+      const drawnTeam = teamMap.get(drawnRosterId);
+      if (drawnTeam) {
+        // Calculate the probability this team had BEFORE the lottery to land THIS specific pick
+        const preLotteryOdds = calculatePreLotteryProbability(
+          drawnRosterId,
+          currentPick,
+          eligibleTeams,
+          lockedPicks,
+          totalPicks
+        );
+        
+        results.push({
+          pick: currentPick,
+          rosterId: drawnRosterId,
+          teamName: drawnTeam.displayName,
+          odds: Math.round(preLotteryOdds * 10) / 10, // Probability BEFORE lottery to land this specific pick
+          wasLocked: false,
+        });
+        assignedRosterIds.add(drawnRosterId);
+      }
+
+      currentPick++;
+    }
+
+    // Sort results by pick number
+    results.sort((a, b) => a.pick - b.pick);
+    setLotteryResults(results);
+    setError(null);
   }
 
   return (
@@ -598,6 +895,7 @@ export default function LeaguePage() {
             <button
               className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={teams.length === 0}
+              onClick={simulateLotteryDraw}
               title="Run a single random lottery simulation to see one possible outcome of the draft order draw."
             >
               Simulate draw
@@ -610,6 +908,56 @@ export default function LeaguePage() {
               Show all permutations
             </button>
           </div>
+
+          {/* Lottery Results Display */}
+          {lotteryResults && lotteryResults.length > 0 ? (
+            <div className="mt-6 rounded-2xl border border-zinc-800 bg-black p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-semibold text-zinc-100">Lottery Simulation Results</h3>
+                <button
+                  onClick={() => setLotteryResults(null)}
+                  className="text-sm text-zinc-400 hover:text-zinc-200"
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="space-y-2">
+                {lotteryResults.map((result) => {
+                  const team = teams.find((t) => t.rosterId === result.rosterId);
+                  return (
+                    <div
+                      key={result.pick}
+                      className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-3"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center justify-center w-16 h-10 rounded-full bg-zinc-900 border border-zinc-800 text-sm font-semibold text-zinc-100">
+                          1.{String(result.pick).padStart(2, '0')}
+                        </div>
+                        <div>
+                          <div className="font-medium text-zinc-100">{result.teamName}</div>
+                          {result.wasLocked ? (
+                            <div className="text-xs text-zinc-500">Locked pick</div>
+                          ) : (
+                            <div className="text-xs text-zinc-500">
+                              {result.odds > 0 
+                                ? `${result.odds}% odds to land the 1.${String(result.pick).padStart(2, '0')} pick`
+                                : "Assigned"}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {team && (
+                        <div className="text-sm text-zinc-400">
+                          {team.record.wins}-{team.record.losses}
+                          {team.record.ties ? `-${team.record.ties}` : ""}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
 
           {/* Team lottery configuration table */}
           <div className="mt-6 overflow-x-auto">
@@ -743,20 +1091,45 @@ export default function LeaguePage() {
                       </td>
                       <td className="px-4 py-3">
                         <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={config.balls ?? 0}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          value={config.balls === 0 ? "" : String(config.balls)}
                           onChange={(e) => {
-                            const val = parseInt(e.target.value, 10);
-                            if (!isNaN(val) && val >= 0) {
+                            const inputValue = e.target.value;
+                            
+                            // Allow empty string while typing
+                            if (inputValue === "") {
                               updateLotteryConfig(team.rosterId, {
-                                balls: val,
+                                balls: 0,
+                              });
+                              return;
+                            }
+                            
+                            // Only allow digits
+                            if (!/^\d+$/.test(inputValue)) {
+                              return; // Ignore invalid input
+                            }
+                            
+                            const numValue = parseInt(inputValue, 10);
+                            if (!isNaN(numValue) && numValue >= 0) {
+                              updateLotteryConfig(team.rosterId, {
+                                balls: numValue,
                               });
                             }
                           }}
-                          className="w-20 rounded-lg border border-zinc-800 bg-black px-2 py-1 text-sm text-zinc-100 outline-none focus:border-zinc-600"
+                          onBlur={(e) => {
+                            // On blur, ensure we have a valid number (default to 0 if empty)
+                            const inputValue = e.target.value.trim();
+                            if (inputValue === "") {
+                              updateLotteryConfig(team.rosterId, {
+                                balls: 0,
+                              });
+                            }
+                          }}
+                          className="w-20 rounded-lg border border-zinc-800 bg-black px-2 py-1 text-sm text-zinc-100 outline-none focus:border-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed"
                           disabled={!config.includeInLottery}
+                          placeholder="0"
                           title="The number of lottery balls (combinations) assigned to this team. More balls = better odds. Like the NBA lottery system, where worse teams get more balls."
                         />
                       </td>
