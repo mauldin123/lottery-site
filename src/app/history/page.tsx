@@ -350,7 +350,35 @@ export default function HistoryPage() {
                                 1.{String(result.pick).padStart(2, "0")}
                               </div>
                               <div className="flex-1">
-                                <div className="font-medium text-emerald-100">{result.teamName}</div>
+                                <div className="flex items-center gap-2">
+                                  {(() => {
+                                    const team = selectedLottery.configuration.teams.find(t => t.rosterId === result.rosterId);
+                                    if (team?.avatar) {
+                                      return (
+                                        <img 
+                                          src={team.avatar} 
+                                          alt={`${result.teamName} avatar`}
+                                          className="w-8 h-8 rounded-full border border-emerald-700 object-cover flex-shrink-0"
+                                          onError={(e) => {
+                                            // Replace with fallback on error
+                                            const img = e.target as HTMLImageElement;
+                                            const fallback = document.createElement('div');
+                                            fallback.className = 'w-8 h-8 rounded-full border border-emerald-700 bg-emerald-900/50 flex items-center justify-center text-emerald-300 text-xs font-medium flex-shrink-0';
+                                            fallback.textContent = result.teamName.charAt(0).toUpperCase();
+                                            img.parentNode?.replaceChild(fallback, img);
+                                          }}
+                                        />
+                                      );
+                                    }
+                                    // Always show fallback if no avatar or team not found
+                                    return (
+                                      <div className="w-8 h-8 rounded-full border border-emerald-700 bg-emerald-900/50 flex items-center justify-center text-emerald-300 text-xs font-medium flex-shrink-0">
+                                        {result.teamName.charAt(0).toUpperCase()}
+                                      </div>
+                                    );
+                                  })()}
+                                  <div className="font-medium text-emerald-100">{result.teamName}</div>
+                                </div>
                                 {result.wasLocked ? (
                                   <div className="text-xs text-emerald-300/70">Locked pick</div>
                                 ) : (

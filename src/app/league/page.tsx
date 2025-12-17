@@ -1022,6 +1022,41 @@ export default function LeaguePage() {
   }
 
   // Finalize lottery configuration and navigate to lottery page
+  // Save configuration for comparison (without running lottery)
+  function saveConfigurationForComparison(): void {
+    if (!selectedLeagueId || teams.length === 0) {
+      setError("No league loaded. Please load a league first.");
+      return;
+    }
+
+    try {
+      const configId = `config_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      const configData = {
+        id: configId,
+        timestamp: new Date().toISOString(),
+        leagueId: selectedLeagueId,
+        leagueName: leagueInfo?.name ?? "Unknown League",
+        season: leagueInfo?.season ?? "Unknown Season",
+        teams: teams,
+        lotteryConfigs: Array.from(lotteryConfigs.entries()),
+      };
+
+      // Load existing saved configurations
+      const existing = localStorage.getItem("savedConfigurations");
+      const configs = existing ? JSON.parse(existing) : [];
+      configs.push(configData);
+      
+      // Keep only last 20 configurations
+      const trimmed = configs.slice(-20);
+      localStorage.setItem("savedConfigurations", JSON.stringify(trimmed));
+      
+      // Show success message
+      alert(`Configuration saved! You can compare it with others on the Comparison page.`);
+    } catch (e: any) {
+      setError("Failed to save configuration. " + (e?.message || ""));
+    }
+  }
+
   function finalizeLottery(): void {
     if (teams.length === 0) {
       setError("No teams loaded. Please load a league first.");
@@ -1531,7 +1566,28 @@ export default function LeaguePage() {
               className="rounded-2xl border border-zinc-800 bg-black p-4"
             >
               <div className="flex items-center justify-between gap-3">
-                <div className="font-medium text-zinc-100">{t.displayName}</div>
+                <div className="flex items-center gap-3">
+                  {t.avatar ? (
+                    <img 
+                      src={t.avatar} 
+                      alt={`${t.displayName} avatar`}
+                      className="w-10 h-10 rounded-full border border-zinc-700 object-cover"
+                      onError={(e) => {
+                        // Replace with fallback on error
+                        const img = e.target as HTMLImageElement;
+                        const fallback = document.createElement('div');
+                        fallback.className = 'w-10 h-10 rounded-full border border-zinc-700 bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs font-medium';
+                        fallback.textContent = t.displayName.charAt(0).toUpperCase();
+                        img.parentNode?.replaceChild(fallback, img);
+                      }}
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full border border-zinc-700 bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs font-medium">
+                      {t.displayName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="font-medium text-zinc-100">{t.displayName}</div>
+                </div>
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-zinc-400">#{index + 1}</span>
                   {t.madePlayoffs ? (
@@ -1585,6 +1641,14 @@ export default function LeaguePage() {
                 </svg>
               )}
               {isSimulating ? "Simulating..." : "Simulate draw"}
+            </button>
+            <button
+              className="rounded-xl border border-blue-800 bg-blue-900 px-4 py-2 text-sm font-medium text-blue-100 hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 min-h-[44px]"
+              disabled={teams.length === 0}
+              onClick={saveConfigurationForComparison}
+              title="Save this configuration for comparison without running the lottery"
+            >
+              Save for Comparison
             </button>
             <button
               className="rounded-xl border border-emerald-800 bg-emerald-900 px-4 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 min-h-[44px]"
@@ -1866,6 +1930,25 @@ export default function LeaguePage() {
                     >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
+                          {team.avatar ? (
+                            <img 
+                              src={team.avatar} 
+                              alt={`${team.displayName} avatar`}
+                              className="w-8 h-8 rounded-full border border-zinc-700 object-cover flex-shrink-0"
+                              onError={(e) => {
+                                // Replace with fallback on error
+                                const img = e.target as HTMLImageElement;
+                                const fallback = document.createElement('div');
+                                fallback.className = 'w-8 h-8 rounded-full border border-zinc-700 bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs font-medium flex-shrink-0';
+                                fallback.textContent = team.displayName.charAt(0).toUpperCase();
+                                img.parentNode?.replaceChild(fallback, img);
+                              }}
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full border border-zinc-700 bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs font-medium flex-shrink-0">
+                              {team.displayName.charAt(0).toUpperCase()}
+                            </div>
+                          )}
                           <span className="text-sm font-medium text-zinc-100">
                             #{index + 1}
                           </span>

@@ -27,6 +27,9 @@ export default function Navigation() {
           <Link href="/history" className="font-medium text-zinc-300 hover:text-zinc-100 transition-colors">
             History
           </Link>
+          <Link href="/compare" className="font-medium text-zinc-300 hover:text-zinc-100 transition-colors">
+            Compare
+          </Link>
           <Link href="/help" className="font-medium text-zinc-300 hover:text-zinc-100 transition-colors">
             Help
           </Link>
@@ -80,6 +83,13 @@ export default function Navigation() {
               onClick={() => setMobileMenuOpen(false)}
             >
               History
+            </Link>
+            <Link 
+              href="/compare" 
+              className="font-medium text-zinc-300 hover:text-zinc-100 transition-colors py-2 min-h-[44px] flex items-center"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Compare
             </Link>
             <Link 
               href="/help" 

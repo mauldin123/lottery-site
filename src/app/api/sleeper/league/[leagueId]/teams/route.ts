@@ -87,11 +87,25 @@ export async function GET(
     const u = r.owner_id ? userById.get(r.owner_id) : undefined;
     const madePlayoffs = playoffRosterIds.has(r.roster_id);
 
+    // Convert Sleeper avatar identifier to full URL
+    // Sleeper returns just an identifier (e.g., "cc12ec49965eb7856f84d71cf85306af")
+    // which needs to be appended to https://sleepercdn.com/avatars/
+    let avatarUrl: string | null = null;
+    if (u?.avatar) {
+      // Check if it's already a full URL (starts with http)
+      if (u.avatar.startsWith('http://') || u.avatar.startsWith('https://')) {
+        avatarUrl = u.avatar;
+      } else {
+        // It's an identifier, construct the full URL
+        avatarUrl = `https://sleepercdn.com/avatars/${u.avatar}`;
+      }
+    }
+
     return {
       rosterId: r.roster_id,
       ownerId: r.owner_id,
       displayName: u?.display_name ?? u?.username ?? "Orphaned Team",
-      avatar: u?.avatar ?? null,
+      avatar: avatarUrl,
       record: {
         wins: r.settings?.wins ?? 0,
         losses: r.settings?.losses ?? 0,

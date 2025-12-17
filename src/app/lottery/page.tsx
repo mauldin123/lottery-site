@@ -1076,6 +1076,27 @@ export default function LotteryPage() {
                     >
                       1.{String(result.pick).padStart(2, '0')}
                     </div>
+                    {team?.avatar ? (
+                      <img 
+                        src={team.avatar} 
+                        alt={`${result.teamName} avatar`}
+                        className="w-10 h-10 rounded-full border border-emerald-700 object-cover flex-shrink-0"
+                        onError={(e) => {
+                          // On error, replace with fallback
+                          const parent = (e.target as HTMLImageElement).parentElement;
+                          if (parent) {
+                            const fallback = document.createElement('div');
+                            fallback.className = 'w-10 h-10 rounded-full border border-emerald-700 bg-emerald-900/50 flex items-center justify-center text-emerald-300 text-sm font-medium flex-shrink-0';
+                            fallback.textContent = result.teamName.charAt(0).toUpperCase();
+                            parent.replaceChild(fallback, e.target as HTMLImageElement);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full border border-emerald-700 bg-emerald-900/50 flex items-center justify-center text-emerald-300 text-sm font-medium flex-shrink-0">
+                        {result.teamName.charAt(0).toUpperCase()}
+                      </div>
+                    )}
                     <div className="flex-1 relative">
                       {isRevealed ? (
                         <>

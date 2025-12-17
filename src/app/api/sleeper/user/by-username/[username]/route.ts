@@ -39,12 +39,26 @@ export async function GET(
     );
   }
 
+  // Convert Sleeper avatar identifier to full URL
+  // Sleeper returns just an identifier (e.g., "cc12ec49965eb7856f84d71cf85306af")
+  // which needs to be appended to https://sleepercdn.com/avatars/
+  let avatarUrl: string | null = null;
+  if (data.avatar) {
+    // Check if it's already a full URL (starts with http)
+    if (data.avatar.startsWith('http://') || data.avatar.startsWith('https://')) {
+      avatarUrl = data.avatar;
+    } else {
+      // It's an identifier, construct the full URL
+      avatarUrl = `https://sleepercdn.com/avatars/${data.avatar}`;
+    }
+  }
+
   return NextResponse.json({
     user: {
       userId: data.user_id,
       username: data.username,
       displayName: data.display_name,
-      avatar: data.avatar,
+      avatar: avatarUrl,
     },
   });
 }
