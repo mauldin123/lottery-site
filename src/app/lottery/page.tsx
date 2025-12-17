@@ -797,17 +797,17 @@ export default function LotteryPage() {
   const lotteryConfigs = new Map<number, LotteryTeamConfig>(configEntries);
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-10">
-      <div className="flex items-center justify-between mb-4">
+    <div className="mx-auto max-w-5xl px-3 sm:px-4 py-6 sm:py-10">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
         <div>
-          <h1 className="text-4xl font-bold">Final Lottery Draw</h1>
-          <p className="mt-2 text-zinc-400">
+          <h1 className="text-3xl sm:text-4xl font-bold">Final Lottery Draw</h1>
+          <p className="mt-2 text-sm sm:text-base text-zinc-400">
             This is the official lottery draw. The configuration is locked and cannot be changed.
           </p>
         </div>
         <button
           onClick={clearLotteryConfiguration}
-          className="rounded-xl border border-red-800 bg-red-900 px-4 py-2 text-sm font-medium text-red-100 hover:bg-red-800 transition-all flex items-center gap-2"
+          className="w-full sm:w-auto rounded-xl border border-red-800 bg-red-900 px-4 py-2.5 text-sm font-medium text-red-100 hover:bg-red-800 transition-all flex items-center justify-center gap-2 min-h-[44px]"
           title="Clear lottery configuration and restart"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -841,9 +841,9 @@ export default function LotteryPage() {
       ) : null}
 
       {/* League Summary */}
-      <section className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-6">
-        <h2 className="text-2xl font-semibold">League Information</h2>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
+      <section className="mt-8 sm:mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4 sm:p-6">
+        <h2 className="text-xl sm:text-2xl font-semibold">League Information</h2>
+        <div className="mt-4 grid gap-4 grid-cols-1 sm:grid-cols-2">
           <div>
             <div className="text-sm text-zinc-400">League Name</div>
             <div className="text-lg font-medium text-zinc-100">{leagueInfo?.name ?? "N/A"}</div>
@@ -870,16 +870,26 @@ export default function LotteryPage() {
           This configuration was finalized and cannot be changed.
         </p>
 
-        <div className="mt-6 overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
-          <table className="w-full border-collapse min-w-[600px]">
+        <div className="mt-6 overflow-x-auto -mx-4 px-4 sm:-mx-6 sm:px-6 relative">
+          <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-zinc-950/40 to-transparent pointer-events-none sm:hidden"></div>
+          <table className="w-full border-collapse text-xs sm:text-sm min-w-[600px]">
             <thead>
               <tr className="border-b border-zinc-800">
-                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-300">Team</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-300">In Lottery</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-300">Balls</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-300">Odds %</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-300">Locked Pick</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-300">Manual Slot</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-zinc-300">Team</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-zinc-300">
+                  <span className="hidden sm:inline">In Lottery</span>
+                  <span className="sm:hidden">In</span>
+                </th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-zinc-300">Balls</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-zinc-300">Odds %</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-zinc-300">
+                  <span className="hidden sm:inline">Locked Pick</span>
+                  <span className="sm:hidden">Locked</span>
+                </th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-zinc-300">
+                  <span className="hidden sm:inline">Manual Slot</span>
+                  <span className="sm:hidden">Slot</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -894,30 +904,30 @@ export default function LotteryPage() {
                 };
                 return (
                   <tr key={team.rosterId} className="border-b border-zinc-800/50">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-zinc-100">#{index + 1}</span>
-                        <span className="text-sm text-zinc-300">{team.displayName}</span>
+                    <td className="px-2 sm:px-4 py-2 sm:py-3">
+                      <div className="flex items-center gap-1.5 sm:gap-2">
+                        <span className="text-xs sm:text-sm font-medium text-zinc-100">#{index + 1}</span>
+                        <span className="text-xs sm:text-sm text-zinc-300 truncate max-w-[100px] sm:max-w-none">{team.displayName}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-zinc-300">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3">
+                      <span className="text-xs sm:text-sm text-zinc-300">
                         {config.includeInLottery ? "Yes" : "No"}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-zinc-300">{config.balls}</span>
+                    <td className="px-2 sm:px-4 py-2 sm:py-3">
+                      <span className="text-xs sm:text-sm text-zinc-300">{config.balls}</span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-zinc-300">{config.calculatedPercent}%</span>
+                    <td className="px-2 sm:px-4 py-2 sm:py-3">
+                      <span className="text-xs sm:text-sm text-zinc-300">{config.calculatedPercent}%</span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-zinc-300">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3">
+                      <span className="text-xs sm:text-sm text-zinc-300">
                         {config.isLockedPick ? "Yes" : "No"}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-zinc-300">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3">
+                      <span className="text-xs sm:text-sm text-zinc-300">
                         {config.manualSlot ?? "—"}
                       </span>
                     </td>
@@ -930,14 +940,14 @@ export default function LotteryPage() {
       </section>
 
       {/* Run Final Lottery Button */}
-      <section className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-6">
-        <h2 className="text-2xl font-semibold">Run Final Lottery</h2>
+      <section className="mt-8 sm:mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4 sm:p-6">
+        <h2 className="text-xl sm:text-2xl font-semibold">Run Final Lottery</h2>
         <p className="mt-2 text-sm text-zinc-400">
           Click the button below to execute the official lottery draw. This will determine the final draft order.
         </p>
         <div className="mt-6">
           <button
-            className="rounded-xl border border-emerald-800 bg-emerald-900 px-6 py-3 text-lg font-medium text-emerald-100 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 transition-all flex items-center gap-2"
+            className="w-full sm:w-auto rounded-xl border border-emerald-800 bg-emerald-900 px-6 py-3 text-base sm:text-lg font-medium text-emerald-100 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 transition-all flex items-center justify-center gap-2 min-h-[44px]"
             onClick={runFinalLottery}
             disabled={finalResults !== null || isRunningLottery}
             aria-label={finalResults ? "Lottery already run" : isRunningLottery ? "Running lottery" : "Run final lottery"}
@@ -955,18 +965,18 @@ export default function LotteryPage() {
 
       {/* Final Results */}
       {finalResults && finalResults.length > 0 ? (
-        <section ref={resultsSectionRef} className="mt-10 rounded-2xl border border-emerald-800 bg-emerald-950/20 p-6">
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
+        <section ref={resultsSectionRef} className="mt-8 sm:mt-10 rounded-2xl border border-emerald-800 bg-emerald-950/20 p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <div>
-              <h2 className="text-2xl font-semibold text-emerald-100">Final Lottery Results</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold text-emerald-100">Final Lottery Results</h2>
               <p className="mt-2 text-sm text-emerald-200/80">
                 The official draft order has been determined. Click each pick to reveal the result!
               </p>
             </div>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex flex-col sm:flex-row gap-2 flex-wrap">
               {revealedPicks.size < finalResults.length && (
                 <button
-                  className="rounded-xl border border-blue-800 bg-blue-900 px-4 py-2 text-sm font-medium text-blue-100 hover:bg-blue-800"
+                  className="w-full sm:w-auto rounded-xl border border-blue-800 bg-blue-900 px-4 py-2.5 text-sm font-medium text-blue-100 hover:bg-blue-800 min-h-[44px]"
                   onClick={revealAllPicks}
                   title="Reveal all picks at once"
                 >
@@ -974,7 +984,7 @@ export default function LotteryPage() {
                 </button>
               )}
               <button
-                className="rounded-xl border border-emerald-800 bg-emerald-900 px-4 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full sm:w-auto rounded-xl border border-emerald-800 bg-emerald-900 px-4 py-2.5 text-sm font-medium text-emerald-100 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 min-h-[44px]"
                 onClick={saveLotteryResults}
                 disabled={isSaved}
                 title="Save lottery results to local storage"
@@ -982,28 +992,28 @@ export default function LotteryPage() {
                 {isSaved ? "✓ Saved" : "Save Results"}
               </button>
               <button
-                className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800"
+                className="w-full sm:w-auto rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100 hover:bg-zinc-800 min-h-[44px]"
                 onClick={exportToJSON}
                 title="Export results as JSON"
               >
                 Export JSON
               </button>
               <button
-                className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800"
+                className="w-full sm:w-auto rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100 hover:bg-zinc-800 min-h-[44px]"
                 onClick={exportToCSV}
                 title="Export results as CSV"
               >
                 Export CSV
               </button>
               <button
-                className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800"
+                className="w-full sm:w-auto rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100 hover:bg-zinc-800 min-h-[44px]"
                 onClick={shareLotteryResults}
                 title="Generate shareable link"
               >
                 Share
               </button>
               <button
-                className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800"
+                className="w-full sm:w-auto rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100 hover:bg-zinc-800 min-h-[44px]"
                 onClick={printLotteryResults}
                 title="Print results"
               >
@@ -1011,7 +1021,7 @@ export default function LotteryPage() {
               </button>
             </div>
           </div>
-          <div className="mt-6 space-y-2">
+          <div className="mt-6 space-y-3 sm:space-y-2">
             {finalResults.map((result) => {
               const team = teams.find((t) => t.rosterId === result.rosterId);
               const isRevealed = revealedPicks.has(result.pick);
@@ -1036,7 +1046,7 @@ export default function LotteryPage() {
               return (
                 <div
                   key={result.pick}
-                  className={`flex flex-col sm:flex-row sm:items-center sm:justify-between rounded-lg ${borderIntensity} bg-emerald-950/40 transition-all duration-300 ${
+                  className={`flex flex-col sm:flex-row sm:items-center sm:justify-between rounded-lg ${borderIntensity} bg-emerald-950/40 transition-all duration-300 gap-3 sm:gap-4 ${
                     isRevealed 
                       ? "cursor-default" 
                       : "cursor-pointer hover:bg-emerald-950/60 hover:border-emerald-700/70"

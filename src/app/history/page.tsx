@@ -170,10 +170,10 @@ export default function HistoryPage() {
   });
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      <div className="flex items-center justify-between mb-6">
+    <div className="mx-auto max-w-6xl px-3 sm:px-4 py-6 sm:py-10">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-4xl font-bold">Lottery History</h1>
+          <h1 className="text-3xl sm:text-4xl font-bold">Lottery History</h1>
           <p className="mt-2 text-zinc-400">
             View and manage your saved lottery results from previous years.
           </p>
@@ -250,7 +250,7 @@ export default function HistoryPage() {
                 Saved Lotteries ({filteredLotteries.length})
               </h2>
               {filteredLotteries.length === 0 ? (
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-6 text-center text-zinc-400">
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4 sm:p-6 text-center text-zinc-400">
                   No lotteries match the selected filters.
                 </div>
               ) : (
@@ -293,9 +293,9 @@ export default function HistoryPage() {
             {/* Lottery Details */}
             <div className="lg:sticky lg:top-4 lg:h-fit">
               {selectedLottery ? (
-                <div className="rounded-2xl border border-emerald-800 bg-emerald-950/20 p-6">
+                <div className="rounded-2xl border border-emerald-800 bg-emerald-950/20 p-4 sm:p-6">
                   <div className="flex items-start justify-between mb-4">
-                    <h2 className="text-2xl font-semibold text-emerald-100">
+                    <h2 className="text-xl sm:text-2xl font-semibold text-emerald-100">
                       {selectedLottery.leagueName}
                     </h2>
                     <div className="flex gap-2">

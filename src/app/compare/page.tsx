@@ -109,9 +109,9 @@ export default function ComparePage() {
   const selectedConfigsArray = savedConfigs.filter((c) => selectedConfigs.has(c.id));
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-10">
+    <div className="mx-auto max-w-7xl px-3 sm:px-4 py-6 sm:py-10">
       <div className="mb-6">
-        <h1 className="text-4xl font-bold text-zinc-100">Compare Configurations</h1>
+        <h1 className="text-3xl sm:text-4xl font-bold text-zinc-100">Compare Configurations</h1>
         <p className="mt-2 text-zinc-400">
           Compare up to 3 lottery configurations side-by-side to see how different settings affect odds and outcomes.
         </p>
@@ -139,8 +139,8 @@ export default function ComparePage() {
       ) : (
         <>
           {/* Configuration List */}
-          <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-6">
-            <h2 className="text-xl font-semibold text-zinc-100 mb-4">
+          <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4 sm:p-6">
+            <h2 className="text-lg sm:text-xl font-semibold text-zinc-100 mb-4">
               Saved Configurations ({savedConfigs.length})
             </h2>
             <p className="text-sm text-zinc-400 mb-4">
@@ -237,10 +237,10 @@ export default function ComparePage() {
                   return (
                     <div
                       key={config.id}
-                      className="rounded-2xl border border-blue-800 bg-blue-950/20 p-6"
+                      className="rounded-2xl border border-blue-800 bg-blue-950/20 p-4 sm:p-6"
                     >
                       <div className="mb-4">
-                        <h3 className="text-lg font-semibold text-blue-100">{config.leagueName}</h3>
+                        <h3 className="text-base sm:text-lg font-semibold text-blue-100">{config.leagueName}</h3>
                         <p className="text-sm text-blue-300/70 mt-1">
                           Season {config.season} • {formatDate(config.timestamp)}
                         </p>

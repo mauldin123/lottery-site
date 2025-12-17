@@ -1269,16 +1269,16 @@ export default function LeaguePage() {
   }, []); // Only run on mount
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-10">
-      <h1 className="text-4xl font-bold">Load a Sleeper League</h1>
+    <div className="mx-auto max-w-5xl px-3 sm:px-4 py-6 sm:py-10">
+      <h1 className="text-3xl sm:text-4xl font-bold">Load a Sleeper League</h1>
       <p className="mt-2 text-zinc-400">
         Use a Sleeper username to pick a league, or paste a numeric league ID directly.
       </p>
 
       {/* Left: search by username; right: load by direct league ID */}
       <div className="mt-8 grid gap-6 md:grid-cols-2">
-        <section className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-6">
-          <h2 className="text-xl font-semibold">Find by username</h2>
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4 sm:p-6">
+          <h2 className="text-lg sm:text-xl font-semibold">Find by username</h2>
 
           <label htmlFor="username-input" className="mt-4 block text-sm text-zinc-300">
             Sleeper username
@@ -1378,8 +1378,8 @@ export default function LeaguePage() {
           ) : null}
         </section>
 
-        <section className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-6">
-          <h2 className="text-xl font-semibold">Load by league ID</h2>
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4 sm:p-6">
+          <h2 className="text-lg sm:text-xl font-semibold">Load by league ID</h2>
 
           <label htmlFor="league-id-input" className="mt-4 block text-sm text-zinc-300">
             League ID
@@ -1496,10 +1496,10 @@ export default function LeaguePage() {
       ) : null}
 
       {/* League + teams summary, followed by the per-team cards */}
-      <section ref={leagueDetailsRef} className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-6">
+      <section ref={leagueDetailsRef} className="mt-8 sm:mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4 sm:p-6">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
-            <h2 className="text-2xl font-semibold">League details</h2>
+            <h2 className="text-xl sm:text-2xl font-semibold">League details</h2>
             <p className="mt-1 text-sm text-zinc-400">
               This section fills after you click a league or load by ID.
             </p>
@@ -1570,13 +1570,13 @@ export default function LeaguePage() {
           </div>
         )}
 
-        <h3 className="mt-8 text-xl font-semibold">Teams</h3>
+        <h3 className="mt-8 text-lg sm:text-xl font-semibold">Teams</h3>
         {/* Teams are already sorted by record; index + 1 gives us the rank (#1, #2, ...) */}
-        <div className="mt-3 grid gap-3 sm:grid-cols-1 md:grid-cols-2">
+        <div className="mt-3 grid gap-3 grid-cols-1 sm:grid-cols-2">
           {(teams ?? []).map((t, index) => (
             <div
               key={t.rosterId}
-              className="rounded-2xl border border-zinc-800 bg-black p-4"
+              className="rounded-2xl border border-zinc-800 bg-black p-3 sm:p-4"
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
@@ -1628,10 +1628,10 @@ export default function LeaguePage() {
 
       {/* Lottery Setup section - only show when teams are loaded */}
       {teams.length > 0 ? (
-        <section className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-6">
+        <section className="mt-8 sm:mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4 sm:p-6">
           <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
             <div>
-              <h2 className="text-2xl font-semibold">Lottery Setup</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold">Lottery Setup</h2>
               <p className="mt-1 text-sm text-zinc-400">
                 Configure which teams are eligible for the lottery and their odds weights.
               </p>
@@ -1639,9 +1639,9 @@ export default function LeaguePage() {
           </div>
 
           {/* Action buttons */}
-          <div className="mt-6 flex flex-wrap gap-3">
+          <div className="mt-6 flex flex-col sm:flex-row flex-wrap gap-3">
             <button
-              className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 flex items-center gap-2"
+              className="w-full sm:w-auto rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center gap-2 min-h-[44px]"
               disabled={teams.length === 0 || isSimulating}
               onClick={simulateLotteryDraw}
               title="Run a single random lottery simulation to see one possible outcome of the draft order draw."
@@ -1656,7 +1656,7 @@ export default function LeaguePage() {
               {isSimulating ? "Simulating..." : "Simulate draw"}
             </button>
             <button
-              className="rounded-xl border border-blue-800 bg-blue-900 px-4 py-2 text-sm font-medium text-blue-100 hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 min-h-[44px]"
+              className="w-full sm:w-auto rounded-xl border border-blue-800 bg-blue-900 px-4 py-2.5 text-sm font-medium text-blue-100 hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 min-h-[44px]"
               disabled={teams.length === 0}
               onClick={saveConfigurationForComparison}
               title="Save this configuration for comparison without running the lottery"
@@ -1664,7 +1664,7 @@ export default function LeaguePage() {
               Save for Comparison
             </button>
             <button
-              className="rounded-xl border border-emerald-800 bg-emerald-900 px-4 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 min-h-[44px]"
+              className="w-full sm:w-auto rounded-xl border border-emerald-800 bg-emerald-900 px-4 py-2.5 text-sm font-medium text-emerald-100 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 min-h-[44px]"
               disabled={teams.length === 0}
               onClick={finalizeLottery}
               title="Finalize the lottery configuration and proceed to run the official lottery draw."
@@ -1672,7 +1672,7 @@ export default function LeaguePage() {
               Finalize lottery
             </button>
             <button
-              className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 flex items-center gap-2"
+              className="w-full sm:w-auto rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center gap-2 min-h-[44px]"
               disabled={teams.length === 0 || isCalculatingPermutations}
               onClick={calculateAllPermutations}
               title="Calculate probability distributions for all possible draft order outcomes using simulation."
@@ -1757,17 +1757,18 @@ export default function LeaguePage() {
               </div>
               
               {/* Permutation Table */}
-              <div className="mt-6 overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
-                <table className="w-full border-collapse text-sm min-w-[600px]">
+              <div className="mt-6 overflow-x-auto -mx-4 px-4 sm:-mx-6 sm:px-6 relative">
+                <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-blue-950/20 to-transparent pointer-events-none sm:hidden"></div>
+                <table className="w-full border-collapse text-xs sm:text-sm min-w-[600px]">
                   <thead>
                     <tr className="border-b border-blue-800/50">
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-blue-300 sticky left-0 bg-blue-950/40 z-10">
+                      <th className="px-2 sm:px-3 py-2 text-left text-xs font-semibold text-blue-300 sticky left-0 bg-blue-950/40 z-10">
                         Team
                       </th>
                       {Array.from({ length: teams.length }, (_, i) => i + 1).map((pick) => (
                         <th
                           key={pick}
-                          className="px-2 py-2 text-center text-xs font-semibold text-blue-300 min-w-[60px]"
+                          className="px-1 sm:px-2 py-2 text-center text-xs font-semibold text-blue-300 min-w-[50px] sm:min-w-[60px]"
                         >
                           1.{String(pick).padStart(2, "0")}
                         </th>
@@ -1794,10 +1795,10 @@ export default function LeaguePage() {
                           key={team.rosterId}
                           className="border-b border-blue-800/30 hover:bg-blue-950/30"
                         >
-                          <td className="px-3 py-2 text-blue-100 font-medium sticky left-0 bg-blue-950/40 z-10">
-                            <div className="flex items-center gap-2">
+                          <td className="px-2 sm:px-3 py-2 text-blue-100 font-medium sticky left-0 bg-blue-950/40 z-10">
+                            <div className="flex items-center gap-1 sm:gap-2">
                               <span className="text-xs text-blue-300/70">#{index + 1}</span>
-                              <span className="text-xs">{team.displayName}</span>
+                              <span className="text-xs truncate max-w-[80px] sm:max-w-none">{team.displayName}</span>
                             </div>
                           </td>
                       {Array.from({ length: teams.length }, (_, i) => i + 1).map((pick) => {
@@ -1808,7 +1809,7 @@ export default function LeaguePage() {
                         return (
                           <td
                             key={pick}
-                            className={`px-2 py-2 text-center text-xs ${intensity} ${
+                            className={`px-1 sm:px-2 py-2 text-center text-xs ${intensity} ${
                               isMaxProb ? "ring-2 ring-blue-500/50" : ""
                             }`}
                             title={`${team.displayName} has a ${prob}% chance of landing pick 1.${String(pick).padStart(2, "0")}`}
@@ -1836,13 +1837,13 @@ export default function LeaguePage() {
 
               {/* Visualization Charts */}
               {isCalculatingPermutations ? (
-                <div className="mt-6 grid gap-4 md:grid-cols-2">
+                <div className="mt-6 grid gap-4 grid-cols-1 sm:grid-cols-2">
                   {[1, 2, 3, 4].map((i) => (
                     <SkeletonChart key={i} />
                   ))}
                 </div>
               ) : (
-                <div className="mt-6 grid gap-4 grid-cols-1 md:grid-cols-2">
+                <div className="mt-6 grid gap-4 grid-cols-1 sm:grid-cols-2">
                   {teams
                     .filter((team) => {
                       // Only show teams that have lottery balls
@@ -1860,29 +1861,29 @@ export default function LeaguePage() {
                       const allPicks = Array.from({ length: teams.length }, (_, i) => i + 1);
                       
                       return (
-                        <div key={team.rosterId} className="rounded-lg border border-blue-800/50 bg-blue-950/10 p-4">
-                          <h4 className="text-sm font-semibold text-blue-200 mb-3">{team.displayName}</h4>
+                        <div key={team.rosterId} className="rounded-lg border border-blue-800/50 bg-blue-950/10 p-3 sm:p-4">
+                          <h4 className="text-xs sm:text-sm font-semibold text-blue-200 mb-3">{team.displayName}</h4>
                           <div className="space-y-2">
                             {allPicks.map((pick) => {
                               const prob = teamProbs.get(pick) ?? 0;
                               const width = maxProb > 0 ? (prob / maxProb) * 100 : 0;
                               
-                              return (
-                                <div key={pick} className="flex items-center gap-2">
-                                  <span className="text-xs text-blue-300/70 w-12 flex-shrink-0">
-                                    1.{String(pick).padStart(2, '0')}
-                                  </span>
-                                  <div className="flex-1 bg-blue-900/30 rounded-full h-4 overflow-hidden">
-                                    <div
-                                      className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all"
-                                      style={{ width: `${width}%` }}
-                                    />
-                                  </div>
-                                  <span className="text-xs text-blue-200 w-12 text-right">
-                                    {prob > 0 ? prob.toFixed(1) : '—'}%
-                                  </span>
+                            return (
+                              <div key={pick} className="flex items-center gap-2">
+                                <span className="text-xs text-blue-300/70 w-10 sm:w-12 flex-shrink-0">
+                                  1.{String(pick).padStart(2, '0')}
+                                </span>
+                                <div className="flex-1 bg-blue-900/30 rounded-full h-3 sm:h-4 overflow-hidden">
+                                  <div
+                                    className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all"
+                                    style={{ width: `${width}%` }}
+                                  />
                                 </div>
-                              );
+                                <span className="text-xs text-blue-200 w-10 sm:w-12 text-right">
+                                  {prob > 0 ? prob.toFixed(1) : '—'}%
+                                </span>
+                              </div>
+                            );
                             })}
                           </div>
                         </div>
@@ -1894,42 +1895,46 @@ export default function LeaguePage() {
           ) : null}
 
           {/* Team lottery configuration table */}
-          <div className="mt-6 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-            <table className="w-full border-collapse text-sm min-w-[700px]">
+          <div className="mt-6 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 relative">
+            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-zinc-950/40 to-transparent pointer-events-none sm:hidden"></div>
+            <table className="w-full border-collapse text-xs sm:text-sm min-w-[700px]">
               <thead>
                 <tr className="border-b border-zinc-800">
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-300">
+                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-zinc-300">
                     Team
                   </th>
                   <th
-                    className="px-4 py-3 text-left text-sm font-semibold text-zinc-300 cursor-help"
+                    className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-zinc-300 cursor-help"
                     title="Whether this team participates in the lottery draw. Teams that missed playoffs are included by default, but you can override this for any team."
                   >
-                    Include in lottery
+                    <span className="hidden sm:inline">Include in lottery</span>
+                    <span className="sm:hidden">In lottery</span>
                   </th>
                   <th
-                    className="px-4 py-3 text-left text-sm font-semibold text-zinc-300 cursor-help"
+                    className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-zinc-300 cursor-help"
                     title="The number of lottery balls (combinations) assigned to this team. More balls = better odds. Like the NBA lottery system, where worse teams get more balls."
                   >
                     Balls
                   </th>
                   <th
-                    className="px-4 py-3 text-left text-sm font-semibold text-zinc-300 cursor-help"
+                    className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-zinc-300 cursor-help"
                     title="The calculated percentage chance this team has in the lottery, based on their balls divided by the total balls in the pool. This is automatically computed."
                   >
                     Odds %
                   </th>
                   <th
-                    className="px-4 py-3 text-left text-sm font-semibold text-zinc-300 cursor-help"
+                    className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-zinc-300 cursor-help"
                     title="Lock this team to a specific draft position, removing them from the lottery draw. Use this for trades, penalties, expansion teams, or special circumstances."
                   >
-                    Locked pick
+                    <span className="hidden sm:inline">Locked pick</span>
+                    <span className="sm:hidden">Locked</span>
                   </th>
                   <th
-                    className="px-4 py-3 text-left text-sm font-semibold text-zinc-300 cursor-help"
+                    className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-zinc-300 cursor-help"
                     title="Manually assign a specific draft slot (e.g., '1.01' for first overall pick). Only available when 'Locked pick' is enabled."
                   >
-                    Manual slot
+                    <span className="hidden sm:inline">Manual slot</span>
+                    <span className="sm:hidden">Slot</span>
                   </th>
                 </tr>
               </thead>
@@ -1941,31 +1946,31 @@ export default function LeaguePage() {
                       key={team.rosterId}
                       className="border-b border-zinc-800/50 hover:bg-zinc-900/30"
                     >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
+                      <td className="px-2 sm:px-4 py-2 sm:py-3">
+                        <div className="flex items-center gap-1.5 sm:gap-2">
                           {team.avatar ? (
                             <img 
                               src={team.avatar} 
                               alt={`${team.displayName} avatar`}
-                              className="w-8 h-8 rounded-full border border-zinc-700 object-cover flex-shrink-0"
+                              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-zinc-700 object-cover flex-shrink-0"
                               onError={(e) => {
                                 // Replace with fallback on error
                                 const img = e.target as HTMLImageElement;
                                 const fallback = document.createElement('div');
-                                fallback.className = 'w-8 h-8 rounded-full border border-zinc-700 bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs font-medium flex-shrink-0';
+                                fallback.className = 'w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-zinc-700 bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs font-medium flex-shrink-0';
                                 fallback.textContent = team.displayName.charAt(0).toUpperCase();
                                 img.parentNode?.replaceChild(fallback, img);
                               }}
                             />
                           ) : (
-                            <div className="w-8 h-8 rounded-full border border-zinc-700 bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs font-medium flex-shrink-0">
+                            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-zinc-700 bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs font-medium flex-shrink-0">
                               {team.displayName.charAt(0).toUpperCase()}
                             </div>
                           )}
-                          <span className="text-sm font-medium text-zinc-100">
+                          <span className="text-xs sm:text-sm font-medium text-zinc-100">
                             #{index + 1}
                           </span>
-                          <span className="text-sm text-zinc-300">
+                          <span className="text-xs sm:text-sm text-zinc-300 truncate max-w-[100px] sm:max-w-none">
                             {team.displayName}
                           </span>
                           {team.madePlayoffs ? (
@@ -1979,7 +1984,7 @@ export default function LeaguePage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 sm:px-4 py-2 sm:py-3">
                         <label className="flex items-center cursor-help" title="Whether this team participates in the lottery draw. Teams that missed playoffs are included by default, but you can override this for any team.">
                           <input
                             type="checkbox"
@@ -2048,11 +2053,12 @@ export default function LeaguePage() {
                           />
                         </label>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 sm:px-4 py-2 sm:py-3">
                         <input
                           type="text"
                           inputMode="numeric"
                           pattern="[0-9]*"
+                          className="w-full sm:w-20 rounded-lg border border-zinc-700 bg-black px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-zinc-100 outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600"
                           value={ballsInputValues.get(team.rosterId) ?? (config.balls === 0 ? "" : String(config.balls))}
                           onChange={(e) => {
                             const inputValue = e.target.value;
@@ -2147,18 +2153,17 @@ export default function LeaguePage() {
                               });
                             }
                           }}
-                          className="w-20 rounded-lg border border-zinc-800 bg-black px-2 py-1 text-sm text-zinc-100 outline-none focus:border-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed"
                           disabled={!config.includeInLottery}
                           placeholder="0"
                           title="The number of lottery balls (combinations) assigned to this team. More balls = better odds. Like the NBA lottery system, where worse teams get more balls."
                         />
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="text-sm text-zinc-300">
+                      <td className="px-2 sm:px-4 py-2 sm:py-3">
+                        <span className="text-xs sm:text-sm text-zinc-300">
                           {config.calculatedPercent ?? 0}%
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 sm:px-4 py-2 sm:py-3">
                         <label className="flex items-center cursor-help" title="Lock this team to a specific draft position, removing them from the lottery draw. Use this for trades, penalties, expansion teams, or special circumstances.">
                           <input
                             type="checkbox"
@@ -2176,7 +2181,7 @@ export default function LeaguePage() {
                           />
                         </label>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 sm:px-4 py-2 sm:py-3">
                         <select
                           value={config.manualSlot || ""}
                           onChange={(e) => {
@@ -2202,7 +2207,7 @@ export default function LeaguePage() {
                             }
                           }}
                           disabled={!config.isLockedPick}
-                          className="w-32 rounded-lg border border-zinc-800 bg-black px-2 py-1 text-sm text-zinc-100 outline-none focus:border-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="w-full sm:w-32 rounded-lg border border-zinc-800 bg-black px-2 py-1.5 sm:py-1 text-xs sm:text-sm text-zinc-100 outline-none focus:border-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Manually assign a specific draft slot (e.g., '1.01' for first overall pick). Only available when 'Locked pick' is enabled."
                         >
                           <option value="">Select pick...</option>

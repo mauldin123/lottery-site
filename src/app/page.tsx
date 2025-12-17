@@ -4,11 +4,11 @@ export default function Home() {
   return (
     <main className="min-h-screen">
       {/* Hero Section */}
-      <section className="mx-auto max-w-6xl px-4 py-20 text-center">
-        <h1 className="text-6xl font-bold tracking-tight text-zinc-100 sm:text-7xl">
+      <section className="mx-auto max-w-6xl px-3 sm:px-4 py-12 sm:py-20 text-center">
+        <h1 className="text-4xl sm:text-6xl font-bold tracking-tight text-zinc-100 sm:text-7xl">
           Dynasty Lottery
         </h1>
-        <p className="mt-6 text-xl text-zinc-400 sm:text-2xl">
+        <p className="mt-4 sm:mt-6 text-lg sm:text-xl text-zinc-400 sm:text-2xl">
           Fair, transparent, and exciting draft order determination for your dynasty fantasy league
         </p>
         <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
