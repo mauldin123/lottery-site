@@ -33,79 +33,74 @@ export default function ShareLotteryPage({ params }: { params: Promise<{ shareId
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      // Decode the data from the URL (base64 encoded)
-      // Add padding if needed
-      let base64 = shareId.replace(/-/g, '+').replace(/_/g, '/');
-      while (base64.length % 4) {
-        base64 += '=';
-      }
-
+    async function loadShareData() {
       try {
-        const compact = JSON.parse(atob(base64)) as any;
+        // Try to fetch from API first (short ID approach)
+        const response = await fetch(`/api/lottery/share/${encodeURIComponent(shareId)}`);
         
-        // Convert compact format back to full ShareData format
-        const shareData: ShareData = {
-          id: `share_${Date.now()}`,
-          timestamp: compact.t || new Date().toISOString(),
-          leagueId: compact.l || "",
-          leagueName: compact.n || "Unknown League",
-          season: compact.s || "Unknown Season",
-          results: (compact.r || []).map((r: any) => ({
-            pick: r.p,
-            rosterId: r.i,
-            teamName: r.n,
-            odds: r.o,
-            wasLocked: r.l === 1
-          })),
-          teams: (compact.tm || []).map((t: any) => ({
-            rosterId: t.i,
-            displayName: t.n,
-            avatar: t.a,
-            record: {
-              wins: t.r[0] || 0,
-              losses: t.r[1] || 0,
-              ties: t.r[2] || 0
-            }
-          }))
-        };
-        
-        setShareData(shareData);
-        setError(null);
-      } catch (decodeError) {
-        // If decoding fails, try fetching from API (backward compatibility)
-        async function loadFromAPI() {
+        if (response.ok) {
+          const data = (await response.json()) as ShareData;
+          setShareData(data);
+          setError(null);
+          setLoading(false);
+          return;
+        }
+
+        // If API fails, try decoding as base64 (backward compatibility with old long URLs)
+        if (response.status === 404 && shareId.length > 20) {
           try {
-            const response = await fetch(`/api/lottery/share/${encodeURIComponent(shareId)}`);
-            
-            if (!response.ok) {
-              if (response.status === 404) {
-                setError("Share link not found or has expired.");
-              } else {
-                const errorData = await response.json();
-                setError(errorData.error || "Failed to load shared lottery results.");
-              }
-              setLoading(false);
-              return;
+            let base64 = shareId.replace(/-/g, '+').replace(/_/g, '/');
+            while (base64.length % 4) {
+              base64 += '=';
             }
 
-            const data = (await response.json()) as ShareData;
-            setShareData(data);
+            const compact = JSON.parse(atob(base64)) as any;
+            
+            // Convert compact format back to full ShareData format
+            const shareData: ShareData = {
+              id: `share_${Date.now()}`,
+              timestamp: compact.t || new Date().toISOString(),
+              leagueId: compact.l || "",
+              leagueName: compact.n || "Unknown League",
+              season: compact.s || "Unknown Season",
+              results: (compact.r || []).map((r: any) => ({
+                pick: r.p,
+                rosterId: r.i,
+                teamName: r.n,
+                odds: r.o,
+                wasLocked: r.l === 1
+              })),
+              teams: (compact.tm || []).map((t: any) => ({
+                rosterId: t.i,
+                displayName: t.n,
+                avatar: t.a,
+                record: {
+                  wins: t.r[0] || 0,
+                  losses: t.r[1] || 0,
+                  ties: t.r[2] || 0
+                }
+              }))
+            };
+            
+            setShareData(shareData);
             setError(null);
-          } catch (e: any) {
-            setError("Failed to load shared lottery results. " + (e?.message || ""));
-          } finally {
             setLoading(false);
+            return;
+          } catch (decodeError) {
+            // Decoding failed, fall through to error
           }
         }
-        loadFromAPI();
-        return;
+
+        // If we get here, the share was not found
+        setError("Share link not found or has expired.");
+      } catch (e: any) {
+        setError("Failed to load shared lottery results. " + (e?.message || ""));
+      } finally {
+        setLoading(false);
       }
-    } catch (e: any) {
-      setError("Failed to load shared lottery results. " + (e?.message || ""));
-    } finally {
-      setLoading(false);
     }
+
+    loadShareData();
   }, [shareId]);
 
   if (loading) {
