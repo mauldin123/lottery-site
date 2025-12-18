@@ -18,6 +18,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       return {
         title: `Draft Lottery Results - ${shareData.leagueName}`,
         description: description,
+        themeColor: "#10b981",
         openGraph: {
           title: `Draft Lottery Results - ${shareData.leagueName}`,
           description: description,
@@ -39,6 +40,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: "Draft Lottery Results",
     description: "View shared draft lottery results",
+    themeColor: "#10b981",
     openGraph: {
       title: "Draft Lottery Results",
       description: "View shared draft lottery results",
@@ -51,3 +53,4 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default function ShareLayout({ children }: Props) {
   return <>{children}</>;
 }
+
