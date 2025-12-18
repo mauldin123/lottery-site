@@ -773,17 +773,19 @@ export default function LotteryPage() {
   }
 
   // Share functionality - generate shareable link
-  function shareLotteryResults(): void {
+  async function shareLotteryResults(): Promise<void> {
     if (!lotteryData || !finalResults) {
       setError("No results to share.");
       return;
     }
 
     try {
-      // Save results temporarily with a share ID
+      showToast("Generating share link...", "info");
+      
+      // Generate share ID
       const shareId = `share_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
       const shareData = {
-        id: shareId,
+        shareId,
         timestamp: new Date().toISOString(),
         leagueId: lotteryData.leagueId,
         leagueName: lotteryData.leagueInfo?.name ?? "Unknown League",
@@ -792,8 +794,19 @@ export default function LotteryPage() {
         teams: lotteryData.teams,
       };
 
-      // Store in localStorage with share ID
-      localStorage.setItem(`lottery_share_${shareId}`, JSON.stringify(shareData));
+      // Save to server via API
+      const response = await fetch("/api/lottery/share", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(shareData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to save share data");
+      }
 
       // Generate shareable URL
       const shareUrl = `${window.location.origin}/lottery/share/${shareId}`;

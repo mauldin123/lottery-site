@@ -33,22 +33,32 @@ export default function ShareLotteryPage({ params }: { params: Promise<{ shareId
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(`lottery_share_${shareId}`);
-      if (!stored) {
-        setError("Share link not found or has expired.");
-        setLoading(false);
-        return;
-      }
+    async function loadShareData() {
+      try {
+        const response = await fetch(`/api/lottery/share/${encodeURIComponent(shareId)}`);
+        
+        if (!response.ok) {
+          if (response.status === 404) {
+            setError("Share link not found or has expired.");
+          } else {
+            const errorData = await response.json();
+            setError(errorData.error || "Failed to load shared lottery results.");
+          }
+          setLoading(false);
+          return;
+        }
 
-      const data = JSON.parse(stored) as ShareData;
-      setShareData(data);
-      setError(null);
-    } catch (e: any) {
-      setError("Failed to load shared lottery results. " + (e?.message || ""));
-    } finally {
-      setLoading(false);
+        const data = (await response.json()) as ShareData;
+        setShareData(data);
+        setError(null);
+      } catch (e: any) {
+        setError("Failed to load shared lottery results. " + (e?.message || ""));
+      } finally {
+        setLoading(false);
+      }
     }
+
+    loadShareData();
   }, [shareId]);
 
   if (loading) {
