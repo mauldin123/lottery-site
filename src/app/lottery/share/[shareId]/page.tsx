@@ -42,8 +42,35 @@ export default function ShareLotteryPage({ params }: { params: Promise<{ shareId
       }
 
       try {
-        const decoded = JSON.parse(atob(base64)) as ShareData;
-        setShareData(decoded);
+        const compact = JSON.parse(atob(base64)) as any;
+        
+        // Convert compact format back to full ShareData format
+        const shareData: ShareData = {
+          id: `share_${Date.now()}`,
+          timestamp: compact.t || new Date().toISOString(),
+          leagueId: compact.l || "",
+          leagueName: compact.n || "Unknown League",
+          season: compact.s || "Unknown Season",
+          results: (compact.r || []).map((r: any) => ({
+            pick: r.p,
+            rosterId: r.i,
+            teamName: r.n,
+            odds: r.o,
+            wasLocked: r.l === 1
+          })),
+          teams: (compact.tm || []).map((t: any) => ({
+            rosterId: t.i,
+            displayName: t.n,
+            avatar: t.a,
+            record: {
+              wins: t.r[0] || 0,
+              losses: t.r[1] || 0,
+              ties: t.r[2] || 0
+            }
+          }))
+        };
+        
+        setShareData(shareData);
         setError(null);
       } catch (decodeError) {
         // If decoding fails, try fetching from API (backward compatibility)

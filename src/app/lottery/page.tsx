@@ -782,19 +782,30 @@ export default function LotteryPage() {
     try {
       showToast("Generating share link...", "info");
       
-      // Prepare share data
-      const shareData = {
-        id: `share_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-        timestamp: new Date().toISOString(),
-        leagueId: lotteryData.leagueId,
-        leagueName: lotteryData.leagueInfo?.name ?? "Unknown League",
-        season: lotteryData.leagueInfo?.season ?? "Unknown Season",
-        results: finalResults,
-        teams: lotteryData.teams,
+      // Prepare compact share data (using short property names to reduce URL length)
+      const compactData = {
+        t: new Date().toISOString(), // timestamp
+        l: lotteryData.leagueId, // leagueId
+        n: lotteryData.leagueInfo?.name ?? "Unknown League", // leagueName
+        s: lotteryData.leagueInfo?.season ?? "Unknown Season", // season
+        r: finalResults.map(r => ({
+          p: r.pick, // pick
+          i: r.rosterId, // rosterId
+          n: r.teamName, // teamName
+          o: r.odds, // odds
+          l: r.wasLocked ? 1 : 0 // wasLocked (as number to save space)
+        })),
+        tm: lotteryData.teams.map(t => ({
+          i: t.rosterId, // rosterId
+          n: t.displayName, // displayName
+          a: t.avatar, // avatar
+          r: [t.record.wins, t.record.losses, t.record.ties || 0] // record as array
+        }))
       };
 
-      // Encode data as base64 and embed in URL (works across all devices)
-      const encodedData = btoa(JSON.stringify(shareData))
+      // Minify JSON and encode as base64
+      const jsonString = JSON.stringify(compactData);
+      const encodedData = btoa(jsonString)
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
         .replace(/=+$/, ''); // URL-safe base64
