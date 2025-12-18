@@ -341,10 +341,75 @@ export default function LeaguePage() {
       const eligibleCount = eligibleTeams.length;
       
       // Pre-fill balls based on reverse order of standings (worst teams get more balls)
-      // Use NBA-style distribution: worst team gets most balls, decreasing for better teams
-      // Base distribution: worst gets 140, then 140, 125, 105, 90, 75, 60, 45, 30, 20, 15, 10, 5, 1
-      // For smaller leagues, scale proportionally
-      const nbaDistribution = [140, 140, 125, 105, 90, 75, 60, 45, 30, 20, 15, 10, 5, 1];
+      // Linear percentage distribution: worst team gets 26%, each subsequent team subtracts 4%
+      // Calculate relative values first, then scale to ensure worst team gets exactly 26%
+      
+      // Calculate relative values for each eligible team (26, 22, 18, 14, etc.)
+      const relativeValues = new Map<number, number>();
+      orderedTeams.forEach((team) => {
+        if (!team.madePlayoffs) {
+          const eligibleRank = orderedTeams
+            .filter((t) => !t.madePlayoffs)
+            .findIndex((t) => t.rosterId === team.rosterId);
+          const worstRank = eligibleCount - 1 - eligibleRank;
+          // Calculate relative value: 26 - (worstRank * 4), capped at minimum 2
+          const relativeValue = Math.max(2, 26 - (worstRank * 4));
+          relativeValues.set(team.rosterId, relativeValue);
+        }
+      });
+      
+      // Calculate sum of relative values
+      let sumRelative = 0;
+      relativeValues.forEach((value) => {
+        sumRelative += value;
+      });
+      
+      // Calculate balls proportionally first
+      const BASE_TOTAL = 1000;
+      const tempBalls = new Map<number, number>();
+      let tempTotal = 0;
+      
+      relativeValues.forEach((relative, rosterId) => {
+        const balls = Math.max(1, Math.round((relative / sumRelative) * BASE_TOTAL));
+        tempBalls.set(rosterId, balls);
+        tempTotal += balls;
+      });
+      
+      // Now adjust so worst team is exactly 26% of total
+      const worstTeamId = Array.from(relativeValues.entries()).find(([_, val]) => val === 26)?.[0];
+      if (worstTeamId && tempTotal > 0) {
+        const targetWorstBalls = Math.round(tempTotal * 0.26);
+        const currentWorstBalls = tempBalls.get(worstTeamId) || 1;
+        const diff = targetWorstBalls - currentWorstBalls;
+        
+        // Set worst team to exactly 26%
+        tempBalls.set(worstTeamId, targetWorstBalls);
+        
+        // Adjust other teams proportionally to maintain relative distribution
+        // Calculate new total
+        let newTotal = targetWorstBalls;
+        const otherTeams = new Map<number, number>();
+        tempBalls.forEach((balls, rosterId) => {
+          if (rosterId !== worstTeamId) {
+            otherTeams.set(rosterId, balls);
+            newTotal += balls;
+          }
+        });
+        
+        // Scale other teams so worst team remains 26% of new total
+        // We want: targetWorstBalls / newTotal = 0.26
+        // So: newTotal = targetWorstBalls / 0.26
+        const targetTotal = Math.round(targetWorstBalls / 0.26);
+        const otherTeamsTotal = targetTotal - targetWorstBalls;
+        const currentOtherTotal = newTotal - targetWorstBalls;
+        
+        if (currentOtherTotal > 0) {
+          otherTeams.forEach((balls, rosterId) => {
+            const scaledBalls = Math.max(1, Math.round((balls / currentOtherTotal) * otherTeamsTotal));
+            tempBalls.set(rosterId, scaledBalls);
+          });
+        }
+      }
       
       orderedTeams.forEach((team) => {
         // Default: missed playoffs = eligible, playoff teams = not eligible
@@ -352,26 +417,7 @@ export default function LeaguePage() {
         
         let defaultBalls = 0;
         if (includeInLottery) {
-          // Find rank among eligible teams (0 = best, eligibleCount-1 = worst)
-          const eligibleRank = orderedTeams
-            .filter((t) => !t.madePlayoffs)
-            .findIndex((t) => t.rosterId === team.rosterId);
-          
-          // Worst team (highest rank number) should get most balls
-          // eligibleRank 0 = best team, eligibleRank (eligibleCount-1) = worst team
-          // Reverse the rank: worstRank = eligibleCount - 1 - eligibleRank
-          const worstRank = eligibleCount - 1 - eligibleRank;
-          
-          // Use NBA distribution if we have enough teams, otherwise scale down
-          if (worstRank < nbaDistribution.length) {
-            defaultBalls = nbaDistribution[worstRank];
-          } else {
-            // For teams beyond the distribution, assign unique values
-            // The last value in distribution is 1, so we need to ensure uniqueness
-            // Use: eligibleCount - worstRank, but ensure it's at least 1
-            // This ensures: worstRank=eligibleCount-1 gets 1, worstRank=eligibleCount-2 gets 2, etc.
-            defaultBalls = Math.max(1, eligibleCount - worstRank);
-          }
+          defaultBalls = tempBalls.get(team.rosterId) || 1;
         }
         
         initialConfigs.set(team.rosterId, {
@@ -2064,26 +2110,68 @@ export default function LeaguePage() {
                                 });
                                 
                                 const eligibleCount = sortedEligible.length;
-                                const teamRank = sortedEligible.findIndex(
-                                  (t) => t.rosterId === team.rosterId
-                                );
                                 
-                                // Calculate balls using NBA-style distribution
-                                const nbaDistribution = [140, 140, 125, 105, 90, 75, 60, 45, 30, 20, 15, 10, 5, 1];
-                                const worstRank = eligibleCount - 1 - teamRank;
-                                let defaultBalls;
-                                if (worstRank < nbaDistribution.length) {
-                                  defaultBalls = nbaDistribution[worstRank];
-                                } else {
-                                  // For teams beyond the distribution, assign unique values
-                                  // The last value in distribution is 1, so we need to ensure uniqueness
-                                  // Use: eligibleCount - worstRank, but ensure it's at least 1
-                                  defaultBalls = Math.max(1, eligibleCount - worstRank);
+                                // Calculate relative values for all eligible teams
+                                const relativeValues = new Map<number, number>();
+                                sortedEligible.forEach((t, index) => {
+                                  const worstRank = eligibleCount - 1 - index;
+                                  const relativeValue = Math.max(2, 26 - (worstRank * 4));
+                                  relativeValues.set(t.rosterId, relativeValue);
+                                });
+                                
+                                // Calculate sum of relative values
+                                let sumRelative = 0;
+                                relativeValues.forEach((value) => {
+                                  sumRelative += value;
+                                });
+                                
+                                // Calculate balls proportionally first
+                                const BASE_TOTAL = 1000;
+                                const tempBalls = new Map<number, number>();
+                                let tempTotal = 0;
+                                
+                                relativeValues.forEach((relative, rosterId) => {
+                                  const balls = Math.max(1, Math.round((relative / sumRelative) * BASE_TOTAL));
+                                  tempBalls.set(rosterId, balls);
+                                  tempTotal += balls;
+                                });
+                                
+                                // Now adjust so worst team is exactly 26% of total
+                                const worstTeamId = Array.from(relativeValues.entries()).find(([_, val]) => val === 26)?.[0];
+                                if (worstTeamId && tempTotal > 0) {
+                                  const targetWorstBalls = Math.round(tempTotal * 0.26);
+                                  tempBalls.set(worstTeamId, targetWorstBalls);
+                                  
+                                  // Calculate new total and scale other teams
+                                  let newTotal = targetWorstBalls;
+                                  const otherTeams = new Map<number, number>();
+                                  tempBalls.forEach((balls, rosterId) => {
+                                    if (rosterId !== worstTeamId) {
+                                      otherTeams.set(rosterId, balls);
+                                      newTotal += balls;
+                                    }
+                                  });
+                                  
+                                  // Scale other teams so worst team remains 26% of final total
+                                  const targetTotal = Math.round(targetWorstBalls / 0.26);
+                                  const otherTeamsTotal = targetTotal - targetWorstBalls;
+                                  const currentOtherTotal = newTotal - targetWorstBalls;
+                                  
+                                  if (currentOtherTotal > 0) {
+                                    otherTeams.forEach((balls, rosterId) => {
+                                      const scaledBalls = Math.max(1, Math.round((balls / currentOtherTotal) * otherTeamsTotal));
+                                      tempBalls.set(rosterId, scaledBalls);
+                                    });
+                                  }
                                 }
                                 
-                                updateLotteryConfig(team.rosterId, {
-                                  includeInLottery,
-                                  balls: defaultBalls,
+                                // Update all eligible teams with recalculated balls
+                                sortedEligible.forEach((t) => {
+                                  const balls = tempBalls.get(t.rosterId) || 1;
+                                  updateLotteryConfig(t.rosterId, {
+                                    includeInLottery: t.rosterId === team.rosterId ? includeInLottery : getLotteryConfig(t.rosterId).includeInLottery,
+                                    balls: balls,
+                                  });
                                 });
                               } else {
                                 updateLotteryConfig(team.rosterId, {
@@ -2343,11 +2431,69 @@ export default function LeaguePage() {
                                 return (a.rosterId ?? 0) - (b.rosterId ?? 0);
                               });
                               const eligibleCount = sortedEligible.length;
-                              const teamRank = sortedEligible.findIndex((t) => t.rosterId === team.rosterId);
-                              const nbaDistribution = [140, 140, 125, 105, 90, 75, 60, 45, 30, 20, 15, 10, 5, 1];
-                              const worstRank = eligibleCount - 1 - teamRank;
-                              let defaultBalls = worstRank < nbaDistribution.length ? nbaDistribution[worstRank] : Math.max(1, eligibleCount - worstRank);
-                              updateLotteryConfig(team.rosterId, { includeInLottery, balls: defaultBalls });
+                              
+                              // Calculate relative values for all eligible teams
+                              const relativeValues = new Map<number, number>();
+                              sortedEligible.forEach((t, index) => {
+                                const worstRank = eligibleCount - 1 - index;
+                                const relativeValue = Math.max(2, 26 - (worstRank * 4));
+                                relativeValues.set(t.rosterId, relativeValue);
+                              });
+                              
+                              // Calculate sum of relative values
+                              let sumRelative = 0;
+                              relativeValues.forEach((value) => {
+                                sumRelative += value;
+                              });
+                              
+                              // Calculate balls proportionally first
+                              const BASE_TOTAL = 1000;
+                              const tempBalls = new Map<number, number>();
+                              let tempTotal = 0;
+                              
+                              relativeValues.forEach((relative, rosterId) => {
+                                const balls = Math.max(1, Math.round((relative / sumRelative) * BASE_TOTAL));
+                                tempBalls.set(rosterId, balls);
+                                tempTotal += balls;
+                              });
+                              
+                              // Now adjust so worst team is exactly 26% of total
+                              const worstTeamId = Array.from(relativeValues.entries()).find(([_, val]) => val === 26)?.[0];
+                              if (worstTeamId && tempTotal > 0) {
+                                const targetWorstBalls = Math.round(tempTotal * 0.26);
+                                tempBalls.set(worstTeamId, targetWorstBalls);
+                                
+                                // Calculate new total and scale other teams
+                                let newTotal = targetWorstBalls;
+                                const otherTeams = new Map<number, number>();
+                                tempBalls.forEach((balls, rosterId) => {
+                                  if (rosterId !== worstTeamId) {
+                                    otherTeams.set(rosterId, balls);
+                                    newTotal += balls;
+                                  }
+                                });
+                                
+                                // Scale other teams so worst team remains 26% of final total
+                                const targetTotal = Math.round(targetWorstBalls / 0.26);
+                                const otherTeamsTotal = targetTotal - targetWorstBalls;
+                                const currentOtherTotal = newTotal - targetWorstBalls;
+                                
+                                if (currentOtherTotal > 0) {
+                                  otherTeams.forEach((balls, rosterId) => {
+                                    const scaledBalls = Math.max(1, Math.round((balls / currentOtherTotal) * otherTeamsTotal));
+                                    tempBalls.set(rosterId, scaledBalls);
+                                  });
+                                }
+                              }
+                              
+                              // Update all eligible teams with recalculated balls
+                              sortedEligible.forEach((t) => {
+                                const balls = tempBalls.get(t.rosterId) || 1;
+                                updateLotteryConfig(t.rosterId, {
+                                  includeInLottery: t.rosterId === team.rosterId ? includeInLottery : getLotteryConfig(t.rosterId).includeInLottery,
+                                  balls: balls,
+                                });
+                              });
                             } else {
                               updateLotteryConfig(team.rosterId, { includeInLottery, balls: includeInLottery ? config.balls : 0 });
                             }

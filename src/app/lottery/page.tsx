@@ -149,9 +149,9 @@ function calculatePreLotteryProbability(
   return Math.max(0, Math.min(100, probability * 100));
 }
 
-// Calculate the expected pick position for a team based on weighted probabilities
-// This gives a more accurate representation than just the single highest probability pick
-function calculateExpectedPick(
+// Calculate the expected pick position for a team based on their lottery strength ranking
+// Teams are ranked by their number of balls (most balls = rank 1, expected pick 1)
+function calculateExpectedPickByRanking(
   rosterId: number,
   eligibleTeams: Array<{ rosterId: number; balls: number }>,
   lockedPicks: Map<number, number>,
@@ -163,40 +163,67 @@ function calculateExpectedPick(
     return lockedPickForTeam; // If locked, that's their expected pick
   }
 
-  // Calculate weighted average pick position
-  // Expected pick = sum(pick * probability) for all possible picks
-  let weightedSum = 0;
-  let totalProbability = 0;
-
-  for (let pick = 1; pick <= totalPicks; pick++) {
-    // Skip if this pick is locked to another team
-    if (lockedPicks.has(pick)) {
-      continue;
-    }
-
-    const probability = calculatePreLotteryProbability(
-      rosterId,
-      pick,
-      eligibleTeams,
-      lockedPicks,
-      totalPicks
-    );
-
-    // Add to weighted sum: pick position * probability
-    weightedSum += pick * probability;
-    totalProbability += probability;
-  }
-
-  // If no valid probabilities, return null
-  if (totalProbability === 0) {
+  // Find the team's balls
+  const team = eligibleTeams.find((t) => t.rosterId === rosterId);
+  if (!team || team.balls === 0) {
     return null;
   }
 
-  // Calculate expected pick (weighted average)
-  const expectedPick = weightedSum / totalProbability;
+  // Rank all eligible teams by balls (descending - most balls = rank 1)
+  // Teams with same balls get the SAME rank (not broken by tiebreaker)
+  const sortedByBalls = [...eligibleTeams].sort((a, b) => {
+    if (b.balls !== a.balls) {
+      return b.balls - a.balls; // More balls = better rank
+    }
+    return a.rosterId - b.rosterId; // Tiebreaker only for sorting consistency
+  });
+
+  // Find this team's position in the sorted array
+  const teamIndex = sortedByBalls.findIndex((t) => t.rosterId === rosterId);
+  if (teamIndex === -1) {
+    return null;
+  }
+
+  // Calculate the team's rank, accounting for ties
+  // Teams with the same balls should have the same rank
+  const teamBalls = sortedByBalls[teamIndex].balls;
   
-  // Round to nearest integer for display
-  return Math.round(expectedPick);
+  // Find the first team with the same number of balls
+  const firstTeamWithSameBalls = sortedByBalls.findIndex((t) => t.balls === teamBalls);
+  
+  // Count how many unique ball values are higher (better) than this team's balls
+  const seenBalls = new Set<number>();
+  for (let i = 0; i < firstTeamWithSameBalls; i++) {
+    if (sortedByBalls[i].balls > teamBalls) {
+      seenBalls.add(sortedByBalls[i].balls);
+    }
+  }
+  
+  // Rank = 1 + number of unique higher ball values
+  // Rank 1 = most balls (best), Rank 2 = 2nd most, etc.
+  const teamRank = 1 + seenBalls.size;
+
+  // Calculate expected pick: find the Nth available pick (skipping locked picks)
+  // Rank 1 expects the 1st available pick, Rank 2 expects the 2nd available pick, etc.
+  let availablePickCount = 0;
+  for (let pick = 1; pick <= totalPicks; pick++) {
+    // Skip locked picks
+    if (lockedPicks.has(pick)) {
+      continue;
+    }
+    
+    // Count this as an available pick
+    availablePickCount++;
+    
+    // If this is the Nth available pick where N = teamRank, this is the expected pick
+    if (availablePickCount === teamRank) {
+      return pick;
+    }
+  }
+  
+  // If we couldn't find enough available picks, return the last available pick
+  // This shouldn't happen in normal cases
+  return totalPicks;
 }
 
 export default function LotteryPage() {
@@ -381,48 +408,78 @@ export default function LotteryPage() {
           currentPick++;
         }
 
-        // Calculate most likely picks for all teams before sorting results
-        // This needs to be done before we sort, so we have the full context
-        const resultsWithMostLikely: LotteryResult[] = results.map((result) => {
-          // If already calculated (for lottery-drawn teams), keep it
-          if (result.mostLikelyPick !== undefined) {
-            return result;
-          }
-          
-          // For locked picks, most likely pick is the locked pick itself
-          if (result.wasLocked) {
-            return { ...result, mostLikelyPick: result.pick };
-          }
-          
-          // For assigned teams (not in lottery), calculate based on record ranking
-          if (result.odds === 0) {
-            const sortedAllTeams = [...teams].sort((a, b) => {
-              const aW = a.record?.wins ?? 0;
-              const aL = a.record?.losses ?? 0;
-              const aT = a.record?.ties ?? 0;
-              const bW = b.record?.wins ?? 0;
-              const bL = b.record?.losses ?? 0;
-              const bT = b.record?.ties ?? 0;
-              const aPct = winPct(aW, aL, aT);
-              const bPct = winPct(bW, bL, bT);
-              if (aPct !== bPct) return aPct - bPct;
-              if (aW !== bW) return aW - bW;
-              if (bL !== aL) return bL - aL;
-              return (b.rosterId ?? 0) - (a.rosterId ?? 0);
-            });
-            const teamRank = sortedAllTeams.findIndex((t) => t.rosterId === result.rosterId);
-            const mostLikelyPick = teamRank >= 0 ? teamRank + 1 : null;
-            return { ...result, mostLikelyPick: mostLikelyPick ?? undefined };
-          }
-          
-          // For lottery teams, calculate expected pick based on weighted probabilities
-          const expectedPick = calculateExpectedPick(
-            result.rosterId,
+        // Calculate expected picks based on odds for pick 1.01
+        // Rank teams by their probability of getting pick 1.01 (highest odds = rank 1 = expects pick 1.01)
+        const teamOddsForPick1: Array<{ rosterId: number; odds: number }> = [];
+        
+        eligibleTeams.forEach((team) => {
+          const oddsForPick1 = calculatePreLotteryProbability(
+            team.rosterId,
+            1, // Pick 1.01
             eligibleTeams,
             lockedPicks,
             totalPicks
           );
-          return { ...result, mostLikelyPick: expectedPick ?? undefined };
+          teamOddsForPick1.push({
+            rosterId: team.rosterId,
+            odds: oddsForPick1,
+          });
+        });
+        
+        // Sort by odds descending (highest odds = rank 1)
+        teamOddsForPick1.sort((a, b) => {
+          if (b.odds !== a.odds) {
+            return b.odds - a.odds;
+          }
+          return a.rosterId - b.rosterId; // Tiebreaker for consistency
+        });
+        
+        // Create a map of rosterId -> expected pick rank
+        // Rank teams by their odds for pick 1.01
+        // Teams with same odds get the same rank (they share the expected position)
+        const expectedPickRanks = new Map<number, number>();
+        let currentRank = 1;
+        let lastOdds: number | null = null;
+        
+        teamOddsForPick1.forEach((team, index) => {
+          if (lastOdds === null || team.odds !== lastOdds) {
+            // New unique odds value - assign it the current rank
+            // Only increment rank when we see a new (lower) odds value
+            if (lastOdds !== null) {
+              currentRank++;
+            }
+            lastOdds = team.odds;
+          }
+          // All teams with the same odds get the same rank
+          expectedPickRanks.set(team.rosterId, currentRank);
+        });
+        
+        // Calculate expected picks for all results
+        const resultsWithMostLikely: LotteryResult[] = results.map((result) => {
+          // Don't show movement for locked or assigned teams
+          if (result.wasLocked || result.odds === 0) {
+            return result; // No mostLikelyPick for these
+          }
+          
+          // Get expected pick rank based on odds for pick 1.01
+          const expectedRank = expectedPickRanks.get(result.rosterId);
+          if (expectedRank === undefined) {
+            return result;
+          }
+          
+          // Expected pick = their rank (rank 1 expects pick 1, rank 2 expects pick 2, etc.)
+          // Account for locked picks that come before this rank
+          let lockedPicksBeforeRank = 0;
+          for (let pick = 1; pick < expectedRank; pick++) {
+            if (lockedPicks.has(pick)) {
+              lockedPicksBeforeRank++;
+            }
+          }
+          
+          // Expected pick = rank + number of locked picks that come before this rank
+          const expectedPick = expectedRank + lockedPicksBeforeRank;
+          
+          return { ...result, mostLikelyPick: expectedPick };
         });
 
         resultsWithMostLikely.sort((a, b) => a.pick - b.pick);
@@ -1300,28 +1357,28 @@ export default function LotteryPage() {
                                   ? `${result.odds}% odds to land the 1.${String(result.pick).padStart(2, '0')} pick`
                                   : "Assigned"}
                               </span>
-                              {result.mostLikelyPick !== undefined && result.mostLikelyPick !== null && result.mostLikelyPick !== result.pick && (
-                                <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium ${
-                                  result.pick < result.mostLikelyPick
-                                    ? 'bg-green-900/50 text-green-300 border border-green-700/50'
-                                    : 'bg-red-900/50 text-red-300 border border-red-700/50'
-                                }`}>
-                                  {result.pick < result.mostLikelyPick ? (
-                                    <>
-                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                                      </svg>
-                                      <span>+{result.mostLikelyPick - result.pick}</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                      </svg>
-                                      <span>-{result.pick - result.mostLikelyPick}</span>
-                                    </>
-                                  )}
-                                </span>
+                              {result.mostLikelyPick !== undefined && result.mostLikelyPick !== null && !result.wasLocked && result.odds > 0 && (
+                                result.pick < result.mostLikelyPick ? (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium bg-green-900/50 text-green-300 border border-green-700/50">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                    </svg>
+                                    <span>+{result.mostLikelyPick - result.pick}</span>
+                                  </span>
+                                ) : result.pick > result.mostLikelyPick ? (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium bg-red-900/50 text-red-300 border border-red-700/50">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                    <span>-{result.pick - result.mostLikelyPick}</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium bg-zinc-800/50 text-zinc-400 border border-zinc-700/50">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14" />
+                                    </svg>
+                                  </span>
+                                )
                               )}
                             </div>
                           )}
