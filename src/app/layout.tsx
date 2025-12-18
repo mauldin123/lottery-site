@@ -27,8 +27,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="bg-zinc-950 text-zinc-100">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-zinc-950 text-zinc-100`}>
+    <html lang="en" className="bg-zinc-900 text-zinc-100">
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-zinc-900 text-zinc-100`}>
         <ErrorBoundary>
           <Navigation />
           {children}

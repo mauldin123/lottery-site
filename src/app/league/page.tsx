@@ -1604,7 +1604,7 @@ export default function LeaguePage() {
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-zinc-400">#{index + 1}</span>
                   {t.madePlayoffs ? (
-                    <span className="rounded-full bg-emerald-900/40 px-2 py-0.5 text-xs font-medium text-emerald-300 border border-emerald-700/60">
+                    <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-400 border border-emerald-500/60 shadow-md shadow-emerald-400/20">
                       Playoff Team
                     </span>
                   ) : (
@@ -1653,15 +1653,15 @@ export default function LeaguePage() {
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
               )}
-              {isSimulating ? "Simulating..." : "Simulate draw"}
+              {isSimulating ? "Calculating..." : "Simulate Draw"}
             </button>
             <button
-              className="w-full sm:w-auto rounded-xl border border-blue-800 bg-blue-900 px-4 py-2.5 text-sm font-medium text-blue-100 hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 min-h-[44px]"
+              className="w-full sm:w-auto rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 min-h-[44px]"
               disabled={teams.length === 0}
               onClick={saveConfigurationForComparison}
               title="Save this configuration for comparison without running the lottery"
             >
-              Save for Comparison
+              Save For Comparison
             </button>
             <button
               className="w-full sm:w-auto rounded-xl border border-emerald-800 bg-emerald-900 px-4 py-2.5 text-sm font-medium text-emerald-100 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 min-h-[44px]"
@@ -1669,22 +1669,22 @@ export default function LeaguePage() {
               onClick={finalizeLottery}
               title="Finalize the lottery configuration and proceed to run the official lottery draw."
             >
-              Finalize lottery
+              Finalize Lottery
             </button>
             <button
-              className="w-full sm:w-auto rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center gap-2 min-h-[44px]"
+              className="w-full sm:w-auto rounded-xl border border-blue-800 bg-blue-900 px-4 py-2.5 text-sm font-medium text-blue-100 hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center gap-2 min-h-[44px]"
               disabled={teams.length === 0 || isCalculatingPermutations}
               onClick={calculateAllPermutations}
               title="Calculate probability distributions for all possible draft order outcomes using simulation."
               aria-label={isCalculatingPermutations ? "Calculating permutations" : "Show all permutations"}
             >
               {isCalculatingPermutations && (
-                <svg className="animate-spin h-4 w-4 text-zinc-100" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <svg className="animate-spin h-4 w-4 text-blue-100" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
               )}
-              {isCalculatingPermutations ? "Calculating..." : "Show all permutations"}
+              {isCalculatingPermutations ? "Calculating..." : "Show All Permutations"}
             </button>
           </div>
 
@@ -1756,10 +1756,9 @@ export default function LeaguePage() {
                 </button>
               </div>
               
-              {/* Permutation Table */}
-              <div className="mt-6 overflow-x-auto -mx-4 px-4 sm:-mx-6 sm:px-6 relative">
-                <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-blue-950/20 to-transparent pointer-events-none sm:hidden"></div>
-                <table className="w-full border-collapse text-xs sm:text-sm min-w-[600px]">
+              {/* Permutation Table - Desktop */}
+              <div className="hidden sm:block mt-6 overflow-x-auto -mx-4 px-4 sm:-mx-6 sm:px-6 relative">
+                <table className="w-full border-collapse text-xs sm:text-sm">
                   <thead>
                     <tr className="border-b border-blue-800/50">
                       <th className="px-2 sm:px-3 py-2 text-left text-xs font-semibold text-blue-300 sticky left-0 bg-blue-950/40 z-10">
@@ -1830,9 +1829,54 @@ export default function LeaguePage() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Permutation Cards - Mobile */}
+              <div className="sm:hidden mt-6 space-y-3">
+                {teams.map((team, index) => {
+                  const teamProbs = permutationResults.get(team.rosterId);
+                  if (!teamProbs) return null;
+                  
+                  let maxProb = 0;
+                  let maxPick = 1;
+                  teamProbs.forEach((prob, pick) => {
+                    if (prob > maxProb) {
+                      maxProb = prob;
+                      maxPick = pick;
+                    }
+                  });
+                  
+                  const topPicks = Array.from(teamProbs.entries())
+                    .filter(([_, prob]) => prob > 0)
+                    .sort(([_, a], [__, b]) => b - a)
+                    .slice(0, 5);
+                  
+                  return (
+                    <div key={team.rosterId} className="rounded-lg border border-blue-800/50 bg-blue-950/10 p-4">
+                      <div className="font-medium text-blue-100 mb-3">#{index + 1} {team.displayName}</div>
+                      <div className="space-y-2">
+                        {topPicks.map(([pick, prob]) => {
+                          const isMaxProb = pick === maxPick && maxProb > 0;
+                          return (
+                            <div key={pick} className={`flex items-center justify-between p-2 rounded ${isMaxProb ? 'bg-blue-600/40 ring-2 ring-blue-500/50' : 'bg-blue-900/20'}`}>
+                              <span className="text-sm text-blue-300">1.{String(pick).padStart(2, '0')}</span>
+                              <span className={`text-sm ${prob >= 25 ? 'font-semibold text-blue-100' : prob >= 10 ? 'font-medium text-blue-200' : 'text-blue-300/80'}`}>
+                                {prob}%
+                              </span>
+                            </div>
+                          );
+                        })}
+                        {topPicks.length === 0 && (
+                          <div className="text-sm text-blue-400/50 text-center py-2">No probabilities</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
               
               <div className="mt-4 text-xs text-blue-300/70">
-                <p>💡 Hover over cells to see details. Highlighted cells show each team's most likely pick position.</p>
+                <p className="hidden sm:block">💡 Hover over cells to see details. Highlighted cells show each team's most likely pick position.</p>
+                <p className="sm:hidden">💡 Cards show each team's top 5 most likely pick positions.</p>
               </div>
 
               {/* Visualization Charts */}
@@ -1894,10 +1938,9 @@ export default function LeaguePage() {
             </div>
           ) : null}
 
-          {/* Team lottery configuration table */}
-          <div className="mt-6 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 relative">
-            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-zinc-950/40 to-transparent pointer-events-none sm:hidden"></div>
-            <table className="w-full border-collapse text-xs sm:text-sm min-w-[700px]">
+          {/* Team lottery configuration table - Desktop */}
+          <div className="hidden sm:block mt-6 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 relative">
+            <table className="w-full border-collapse text-xs sm:text-sm">
               <thead>
                 <tr className="border-b border-zinc-800">
                   <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-zinc-300">
@@ -1974,8 +2017,8 @@ export default function LeaguePage() {
                             {team.displayName}
                           </span>
                           {team.madePlayoffs ? (
-                            <span className="rounded-full bg-emerald-900/40 px-2 py-0.5 text-xs font-medium text-emerald-300 border border-emerald-700/60">
-                              Playoff
+                            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-400 border border-emerald-500/60 shadow-md shadow-emerald-400/20">
+                              Playoff Team
                             </span>
                           ) : (
                             <span className="rounded-full bg-zinc-900 px-2 py-0.5 text-xs text-zinc-400 border border-zinc-800">
@@ -2227,6 +2270,231 @@ export default function LeaguePage() {
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="sm:hidden mt-6 space-y-3">
+            {teams.map((team, index) => {
+              const config = getLotteryConfig(team.rosterId);
+              return (
+                <div
+                  key={team.rosterId}
+                  className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4 space-y-3"
+                >
+                  <div className="flex items-center gap-2 pb-2 border-b border-zinc-800">
+                    {team.avatar ? (
+                      <img 
+                        src={team.avatar} 
+                        alt={`${team.displayName} avatar`}
+                        className="w-8 h-8 rounded-full border border-zinc-700 object-cover flex-shrink-0"
+                        onError={(e) => {
+                          const img = e.target as HTMLImageElement;
+                          const fallback = document.createElement('div');
+                          fallback.className = 'w-8 h-8 rounded-full border border-zinc-700 bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs font-medium flex-shrink-0';
+                          fallback.textContent = team.displayName.charAt(0).toUpperCase();
+                          img.parentNode?.replaceChild(fallback, img);
+                        }}
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full border border-zinc-700 bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs font-medium flex-shrink-0">
+                        {team.displayName.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <div className="font-medium text-zinc-100">#{index + 1} {team.displayName}</div>
+                      {team.madePlayoffs ? (
+                        <span className="text-xs text-emerald-400 font-medium shadow-lg shadow-emerald-400/40">Playoff Team</span>
+                      ) : (
+                        <span className="text-xs text-zinc-400">Missed Playoffs</span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={config.includeInLottery}
+                          onChange={(e) => {
+                            const includeInLottery = e.target.checked;
+                            if (includeInLottery && config.balls === 0) {
+                              const eligibleTeams = teams.filter(
+                                (t) =>
+                                  (t.rosterId === team.rosterId && includeInLottery) ||
+                                  (t.rosterId !== team.rosterId &&
+                                    getLotteryConfig(t.rosterId).includeInLottery &&
+                                    !getLotteryConfig(t.rosterId).isLockedPick)
+                              );
+                              const sortedEligible = [...eligibleTeams].sort((a, b) => {
+                                const aW = a.record?.wins ?? 0;
+                                const aL = a.record?.losses ?? 0;
+                                const aT = a.record?.ties ?? 0;
+                                const bW = b.record?.wins ?? 0;
+                                const bL = b.record?.losses ?? 0;
+                                const bT = b.record?.ties ?? 0;
+                                const aPct = winPct(aW, aL, aT);
+                                const bPct = winPct(bW, bL, bT);
+                                if (bPct !== aPct) return bPct - aPct;
+                                if (bW !== aW) return bW - aW;
+                                if (aL !== bL) return aL - bL;
+                                return (a.rosterId ?? 0) - (b.rosterId ?? 0);
+                              });
+                              const eligibleCount = sortedEligible.length;
+                              const teamRank = sortedEligible.findIndex((t) => t.rosterId === team.rosterId);
+                              const nbaDistribution = [140, 140, 125, 105, 90, 75, 60, 45, 30, 20, 15, 10, 5, 1];
+                              const worstRank = eligibleCount - 1 - teamRank;
+                              let defaultBalls = worstRank < nbaDistribution.length ? nbaDistribution[worstRank] : Math.max(1, eligibleCount - worstRank);
+                              updateLotteryConfig(team.rosterId, { includeInLottery, balls: defaultBalls });
+                            } else {
+                              updateLotteryConfig(team.rosterId, { includeInLottery, balls: includeInLottery ? config.balls : 0 });
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-zinc-700 bg-black text-zinc-100 focus:ring-2 focus:ring-zinc-600"
+                        />
+                        <span className="text-zinc-300">In Lottery</span>
+                      </label>
+                    </div>
+                    
+                    <div>
+                      <div className="text-xs text-zinc-400 mb-1">Balls</div>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        className="w-full rounded-lg border border-zinc-800 bg-black px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-zinc-600"
+                        value={ballsInputValues.get(team.rosterId) ?? (config.balls === 0 ? "" : String(config.balls))}
+                        onChange={(e) => {
+                          const inputValue = e.target.value;
+                          setBallsInputValues((prev) => {
+                            const updated = new Map(prev);
+                            updated.set(team.rosterId, inputValue);
+                            return updated;
+                          });
+                          if (inputValue === "") {
+                            debouncedUpdateBalls(team.rosterId, 0);
+                            return;
+                          }
+                          if (!/^\d+$/.test(inputValue)) return;
+                          const numValue = parseInt(inputValue, 10);
+                          if (!isNaN(numValue) && numValue >= 0) {
+                            const MAX_BALLS = 10000;
+                            if (numValue > MAX_BALLS) {
+                              setError(`Balls value cannot exceed ${MAX_BALLS.toLocaleString()}.`);
+                              return;
+                            }
+                            debouncedUpdateBalls(team.rosterId, numValue);
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const inputValue = e.target.value.trim();
+                          const existingTimer = ballsDebounceTimer.current.get(team.rosterId);
+                          if (existingTimer) {
+                            clearTimeout(existingTimer);
+                            ballsDebounceTimer.current.delete(team.rosterId);
+                          }
+                          if (inputValue === "") {
+                            setBallsInputValues((prev) => {
+                              const updated = new Map(prev);
+                              updated.set(team.rosterId, "");
+                              return updated;
+                            });
+                            updateLotteryConfig(team.rosterId, { balls: 0 });
+                          } else {
+                            const numValue = parseInt(inputValue, 10);
+                            if (!isNaN(numValue) && numValue >= 0) {
+                              const MAX_BALLS = 10000;
+                              if (numValue <= MAX_BALLS) {
+                                updateLotteryConfig(team.rosterId, { balls: numValue });
+                              } else {
+                                setBallsInputValues((prev) => {
+                                  const updated = new Map(prev);
+                                  updated.set(team.rosterId, String(MAX_BALLS));
+                                  return updated;
+                                });
+                                updateLotteryConfig(team.rosterId, { balls: MAX_BALLS });
+                                setError(`Balls value cannot exceed ${MAX_BALLS.toLocaleString()}.`);
+                              }
+                            } else {
+                              setBallsInputValues((prev) => {
+                                const updated = new Map(prev);
+                                updated.set(team.rosterId, config.balls === 0 ? "" : String(config.balls));
+                                return updated;
+                              });
+                            }
+                          }
+                        }}
+                        onFocus={(e) => {
+                          if (!ballsInputValues.has(team.rosterId)) {
+                            setBallsInputValues((prev) => {
+                              const updated = new Map(prev);
+                              updated.set(team.rosterId, config.balls === 0 ? "" : String(config.balls));
+                              return updated;
+                            });
+                          }
+                        }}
+                        disabled={!config.includeInLottery}
+                        placeholder="0"
+                      />
+                    </div>
+                    
+                    <div>
+                      <div className="text-xs text-zinc-400 mb-1">Odds %</div>
+                      <div className="text-sm text-zinc-300">{config.calculatedPercent ?? 0}%</div>
+                    </div>
+                    
+                    <div>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={config.isLockedPick}
+                          onChange={(e) =>
+                            updateLotteryConfig(team.rosterId, {
+                              isLockedPick: e.target.checked,
+                              manualSlot: e.target.checked ? config.manualSlot : undefined,
+                            })
+                          }
+                          className="h-4 w-4 rounded border-zinc-700 bg-black text-zinc-100 focus:ring-2 focus:ring-zinc-600"
+                        />
+                        <span className="text-zinc-300">Locked</span>
+                      </label>
+                    </div>
+                    
+                    {config.isLockedPick && (
+                      <div className="col-span-2">
+                        <div className="text-xs text-zinc-400 mb-1">Manual Slot</div>
+                        <select
+                          value={config.manualSlot || ""}
+                          onChange={(e) => {
+                            const slotValue = e.target.value || undefined;
+                            updateLotteryConfig(team.rosterId, { manualSlot: slotValue });
+                            if (slotValue) {
+                              const pickNum = parseManualSlot(slotValue);
+                              if (pickNum === null || pickNum < 1 || pickNum > teams.length) {
+                                setError(`Invalid manual slot: ${slotValue}. Must be between 1.01 and 1.${String(teams.length).padStart(2, '0')}`);
+                              } else {
+                                setError(null);
+                              }
+                            }
+                          }}
+                          className="w-full rounded-lg border border-zinc-800 bg-black px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-zinc-600"
+                        >
+                          <option value="">Select pick...</option>
+                          {Array.from({ length: teams.length }, (_, i) => {
+                            const pick = i + 1;
+                            return (
+                              <option key={pick} value={`1.${String(pick).padStart(2, "0")}`}>
+                                1.{String(pick).padStart(2, "0")}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
       ) : null}

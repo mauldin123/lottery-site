@@ -870,9 +870,9 @@ export default function LotteryPage() {
           This configuration was finalized and cannot be changed.
         </p>
 
-        <div className="mt-6 overflow-x-auto -mx-4 px-4 sm:-mx-6 sm:px-6 relative">
-          <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-zinc-950/40 to-transparent pointer-events-none sm:hidden"></div>
-          <table className="w-full border-collapse text-xs sm:text-sm min-w-[600px]">
+        {/* Desktop Table */}
+        <div className="hidden sm:block mt-6 overflow-x-auto -mx-4 px-4 sm:-mx-6 sm:px-6 relative">
+          <table className="w-full border-collapse text-xs sm:text-sm">
             <thead>
               <tr className="border-b border-zinc-800">
                 <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-zinc-300">Team</th>
@@ -936,6 +936,51 @@ export default function LotteryPage() {
               })}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="sm:hidden mt-6 space-y-3">
+          {teams.map((team, index) => {
+            const config = lotteryConfigs.get(team.rosterId) ?? {
+              rosterId: team.rosterId,
+              includeInLottery: false,
+              balls: 0,
+              calculatedPercent: 0,
+              isLockedPick: false,
+              manualSlot: undefined,
+            };
+            return (
+              <div key={team.rosterId} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4 space-y-2">
+                <div className="flex items-center gap-2 pb-2 border-b border-zinc-800">
+                  <span className="font-medium text-zinc-100">#{index + 1} {team.displayName}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-zinc-400">In Lottery:</span>
+                    <span className="ml-2 text-zinc-300">{config.includeInLottery ? "Yes" : "No"}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400">Balls:</span>
+                    <span className="ml-2 text-zinc-300">{config.balls}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400">Odds:</span>
+                    <span className="ml-2 text-zinc-300">{config.calculatedPercent}%</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400">Locked:</span>
+                    <span className="ml-2 text-zinc-300">{config.isLockedPick ? "Yes" : "No"}</span>
+                  </div>
+                  {config.manualSlot && (
+                    <div className="col-span-2">
+                      <span className="text-zinc-400">Slot:</span>
+                      <span className="ml-2 text-zinc-300">{config.manualSlot}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
 
