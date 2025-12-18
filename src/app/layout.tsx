@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navigation from "./components/Navigation";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import Footer from "./components/Footer";
 
 
 const geistSans = Geist({
@@ -28,10 +29,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="bg-zinc-900 text-zinc-100">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-zinc-900 text-zinc-100`}>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-zinc-900 text-zinc-100 flex flex-col min-h-screen`}>
         <ErrorBoundary>
           <Navigation />
-          {children}
+          <main className="flex-1">
+            {children}
+          </main>
+          <Footer />
         </ErrorBoundary>
       </body>
     </html>
