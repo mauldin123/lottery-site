@@ -1236,31 +1236,10 @@ export default function LotteryPage() {
               </button>
               <button
                 className="w-full sm:w-auto rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100 hover:bg-zinc-800 min-h-[44px]"
-                onClick={exportToJSON}
-                title="Export results as JSON"
-              >
-                Export JSON
-              </button>
-              <button
-                className="w-full sm:w-auto rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100 hover:bg-zinc-800 min-h-[44px]"
-                onClick={exportToCSV}
-                title="Export results as CSV"
-              >
-                Export CSV
-              </button>
-              <button
-                className="w-full sm:w-auto rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100 hover:bg-zinc-800 min-h-[44px]"
                 onClick={shareLotteryResults}
                 title="Generate shareable link"
               >
                 Share
-              </button>
-              <button
-                className="w-full sm:w-auto rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-100 hover:bg-zinc-800 min-h-[44px]"
-                onClick={printLotteryResults}
-                title="Print results"
-              >
-                Print
               </button>
             </div>
           </div>

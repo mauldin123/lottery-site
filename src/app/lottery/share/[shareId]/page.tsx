@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import Link from "next/link";
 
 type LotteryResult = {
@@ -26,14 +26,15 @@ type ShareData = {
   }>;
 };
 
-export default function ShareLotteryPage({ params }: { params: { shareId: string } }) {
+export default function ShareLotteryPage({ params }: { params: Promise<{ shareId: string }> }) {
+  const { shareId } = use(params);
   const [shareData, setShareData] = useState<ShareData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(`lottery_share_${params.shareId}`);
+      const stored = localStorage.getItem(`lottery_share_${shareId}`);
       if (!stored) {
         setError("Share link not found or has expired.");
         setLoading(false);
@@ -48,7 +49,7 @@ export default function ShareLotteryPage({ params }: { params: { shareId: string
     } finally {
       setLoading(false);
     }
-  }, [params.shareId]);
+  }, [shareId]);
 
   if (loading) {
     return (
