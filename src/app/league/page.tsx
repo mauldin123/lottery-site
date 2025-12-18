@@ -509,11 +509,19 @@ export default function LeaguePage() {
     });
 
     // Set percentage to 0 for excluded or locked teams
+    // Don't set balls to 0 for locked teams - preserve the original balls value
+    // so it can be restored when unlocked
     configs.forEach((config, rosterId) => {
       if (!config.includeInLottery || config.isLockedPick) {
         const existing = updated.get(rosterId);
         if (existing) {
-          updated.set(rosterId, { ...existing, calculatedPercent: 0, balls: 0 });
+          if (!config.includeInLottery) {
+            // For excluded teams, set both to 0
+            updated.set(rosterId, { ...existing, calculatedPercent: 0, balls: 0 });
+          } else if (config.isLockedPick) {
+            // For locked teams, only set percentage to 0, preserve balls value
+            updated.set(rosterId, { ...existing, calculatedPercent: 0 });
+          }
         }
       }
     });

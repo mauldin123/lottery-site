@@ -298,10 +298,13 @@ export default function LotteryPage() {
 
         teams.forEach((team) => {
           const config = lotteryConfigs.get(team.rosterId);
-          if (config?.includeInLottery && !config.isLockedPick && config.balls > 0) {
+          // Include team if they're in lottery and not locked
+          // If they have 0 balls but should be in lottery, give them minimum 1 ball
+          if (config?.includeInLottery && !config.isLockedPick) {
+            const balls = config.balls > 0 ? config.balls : 1;
             eligibleTeams.push({
               rosterId: team.rosterId,
-              balls: config.balls,
+              balls: balls,
               teamName: team.displayName,
             });
           }
@@ -408,26 +411,36 @@ export default function LotteryPage() {
           currentPick++;
         }
 
-        // Calculate expected picks based on odds for pick 1.01
-        // Rank teams by their probability of getting pick 1.01 (highest odds = rank 1 = expects pick 1.01)
-        const teamOddsForPick1: Array<{ rosterId: number; odds: number }> = [];
+        // Calculate expected picks based on odds for the highest available (unlocked) pick
+        // Find the highest available pick (first pick that isn't locked)
+        let highestAvailablePick = 1;
+        for (let pick = 1; pick <= totalPicks; pick++) {
+          if (!lockedPicks.has(pick)) {
+            highestAvailablePick = pick;
+            break;
+          }
+        }
+        
+        // Rank teams by their probability of getting the highest available pick
+        // (highest odds = rank 1 = expects that pick)
+        const teamOddsForHighestPick: Array<{ rosterId: number; odds: number }> = [];
         
         eligibleTeams.forEach((team) => {
-          const oddsForPick1 = calculatePreLotteryProbability(
+          const oddsForHighestPick = calculatePreLotteryProbability(
             team.rosterId,
-            1, // Pick 1.01
+            highestAvailablePick,
             eligibleTeams,
             lockedPicks,
             totalPicks
           );
-          teamOddsForPick1.push({
+          teamOddsForHighestPick.push({
             rosterId: team.rosterId,
-            odds: oddsForPick1,
+            odds: oddsForHighestPick,
           });
         });
         
         // Sort by odds descending (highest odds = rank 1)
-        teamOddsForPick1.sort((a, b) => {
+        teamOddsForHighestPick.sort((a, b) => {
           if (b.odds !== a.odds) {
             return b.odds - a.odds;
           }
@@ -435,13 +448,13 @@ export default function LotteryPage() {
         });
         
         // Create a map of rosterId -> expected pick rank
-        // Rank teams by their odds for pick 1.01
+        // Rank teams by their odds for the highest available pick
         // Teams with same odds get the same rank (they share the expected position)
         const expectedPickRanks = new Map<number, number>();
         let currentRank = 1;
         let lastOdds: number | null = null;
         
-        teamOddsForPick1.forEach((team, index) => {
+        teamOddsForHighestPick.forEach((team, index) => {
           if (lastOdds === null || team.odds !== lastOdds) {
             // New unique odds value - assign it the current rank
             // Only increment rank when we see a new (lower) odds value
@@ -454,6 +467,20 @@ export default function LotteryPage() {
           expectedPickRanks.set(team.rosterId, currentRank);
         });
         
+        // Helper function to find the Nth available (unlocked) pick
+        const findNthAvailablePick = (n: number): number | null => {
+          let count = 0;
+          for (let pick = 1; pick <= totalPicks; pick++) {
+            if (!lockedPicks.has(pick)) {
+              count++;
+              if (count === n) {
+                return pick;
+              }
+            }
+          }
+          return null;
+        };
+        
         // Calculate expected picks for all results
         const resultsWithMostLikely: LotteryResult[] = results.map((result) => {
           // Don't show movement for locked or assigned teams
@@ -461,23 +488,18 @@ export default function LotteryPage() {
             return result; // No mostLikelyPick for these
           }
           
-          // Get expected pick rank based on odds for pick 1.01
+          // Get expected pick rank based on odds for the highest available pick
           const expectedRank = expectedPickRanks.get(result.rosterId);
           if (expectedRank === undefined) {
             return result;
           }
           
-          // Expected pick = their rank (rank 1 expects pick 1, rank 2 expects pick 2, etc.)
-          // Account for locked picks that come before this rank
-          let lockedPicksBeforeRank = 0;
-          for (let pick = 1; pick < expectedRank; pick++) {
-            if (lockedPicks.has(pick)) {
-              lockedPicksBeforeRank++;
-            }
+          // Expected pick = the Nth available pick (where N is the rank)
+          // Rank 1 expects the 1st available pick, rank 2 expects the 2nd available pick, etc.
+          const expectedPick = findNthAvailablePick(expectedRank);
+          if (expectedPick === null) {
+            return result; // Couldn't find enough available picks
           }
-          
-          // Expected pick = rank + number of locked picks that come before this rank
-          const expectedPick = expectedRank + lockedPicksBeforeRank;
           
           return { ...result, mostLikelyPick: expectedPick };
         });
