@@ -149,23 +149,25 @@ function calculatePreLotteryProbability(
   return Math.max(0, Math.min(100, probability * 100));
 }
 
-// Calculate the most likely pick for a team based on pre-lottery probabilities
-function calculateMostLikelyPick(
+// Calculate the expected pick position for a team based on weighted probabilities
+// This gives a more accurate representation than just the single highest probability pick
+function calculateExpectedPick(
   rosterId: number,
   eligibleTeams: Array<{ rosterId: number; balls: number }>,
   lockedPicks: Map<number, number>,
   totalPicks: number
 ): number | null {
-  let maxProbability = 0;
-  let mostLikelyPick: number | null = null;
-
   // Check if team is locked to a specific pick
   const lockedPickForTeam = Array.from(lockedPicks.entries()).find(([_, rid]) => rid === rosterId)?.[0];
   if (lockedPickForTeam !== undefined) {
-    return lockedPickForTeam; // If locked, that's their most likely pick
+    return lockedPickForTeam; // If locked, that's their expected pick
   }
 
-  // Calculate probability for each possible pick
+  // Calculate weighted average pick position
+  // Expected pick = sum(pick * probability) for all possible picks
+  let weightedSum = 0;
+  let totalProbability = 0;
+
   for (let pick = 1; pick <= totalPicks; pick++) {
     // Skip if this pick is locked to another team
     if (lockedPicks.has(pick)) {
@@ -180,13 +182,21 @@ function calculateMostLikelyPick(
       totalPicks
     );
 
-    if (probability > maxProbability) {
-      maxProbability = probability;
-      mostLikelyPick = pick;
-    }
+    // Add to weighted sum: pick position * probability
+    weightedSum += pick * probability;
+    totalProbability += probability;
   }
 
-  return mostLikelyPick;
+  // If no valid probabilities, return null
+  if (totalProbability === 0) {
+    return null;
+  }
+
+  // Calculate expected pick (weighted average)
+  const expectedPick = weightedSum / totalProbability;
+  
+  // Round to nearest integer for display
+  return Math.round(expectedPick);
 }
 
 export default function LotteryPage() {
@@ -405,14 +415,14 @@ export default function LotteryPage() {
             return { ...result, mostLikelyPick: mostLikelyPick ?? undefined };
           }
           
-          // For lottery teams, calculate most likely pick
-          const mostLikelyPick = calculateMostLikelyPick(
+          // For lottery teams, calculate expected pick based on weighted probabilities
+          const expectedPick = calculateExpectedPick(
             result.rosterId,
             eligibleTeams,
             lockedPicks,
             totalPicks
           );
-          return { ...result, mostLikelyPick: mostLikelyPick ?? undefined };
+          return { ...result, mostLikelyPick: expectedPick ?? undefined };
         });
 
         resultsWithMostLikely.sort((a, b) => a.pick - b.pick);
@@ -1308,7 +1318,7 @@ export default function LotteryPage() {
                                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                       </svg>
-                                      <span>{result.pick - result.mostLikelyPick}</span>
+                                      <span>-{result.pick - result.mostLikelyPick}</span>
                                     </>
                                   )}
                                 </span>
