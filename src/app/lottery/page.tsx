@@ -819,19 +819,60 @@ export default function LotteryPage() {
       // Generate short shareable URL
       const shareUrl = `${window.location.origin}/lottery/share/${shareId}`;
 
-      // Copy to clipboard
+      // On mobile, try Web Share API first, then fallback to clipboard
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      
+      if (isMobile && typeof navigator.share === 'function') {
+        try {
+          await navigator.share({
+            title: `Draft Lottery Results - ${lotteryData.leagueInfo?.name ?? "Unknown League"}`,
+            text: `Check out the draft lottery results for ${lotteryData.leagueInfo?.name ?? "Unknown League"}!`,
+            url: shareUrl,
+          });
+          showToast("Shared successfully!", "success");
+          return;
+        } catch (shareError: any) {
+          // User cancelled or share failed, fall through to clipboard
+          if (shareError.name !== 'AbortError') {
+            console.log("Web Share failed, falling back to clipboard:", shareError);
+          }
+        }
+      }
+
+      // Copy to clipboard (works on mobile and desktop)
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(shareUrl).then(() => {
+        try {
+          await navigator.clipboard.writeText(shareUrl);
           showToast("Shareable link copied to clipboard!", "success");
-        }).catch(() => {
-          // Fallback: show URL in prompt
-          prompt("Copy this link to share:", shareUrl);
-          showToast("Share link generated!", "info");
-        });
+        } catch (clipboardError) {
+          // Fallback: use a temporary textarea for older browsers
+          try {
+            const textarea = document.createElement("textarea");
+            textarea.value = shareUrl;
+            textarea.style.position = "fixed";
+            textarea.style.left = "-9999px";
+            textarea.style.top = "0";
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            const successful = document.execCommand('copy');
+            document.body.removeChild(textarea);
+            
+            if (successful) {
+              showToast("Shareable link copied to clipboard!", "success");
+            } else {
+              throw new Error("execCommand failed");
+            }
+          } catch (fallbackError) {
+            // Last resort: show URL in prompt
+            prompt("Copy this link to share:", shareUrl);
+            showToast("Share link generated! Please copy the URL above.", "info");
+          }
+        }
       } else {
         // Fallback for browsers without clipboard API
         prompt("Copy this link to share:", shareUrl);
-        showToast("Share link generated!", "info");
+        showToast("Share link generated! Please copy the URL above.", "info");
       }
     } catch (e: any) {
       setError("Failed to generate share link. " + (e?.message || ""));
