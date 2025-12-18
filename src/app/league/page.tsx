@@ -2279,7 +2279,7 @@ export default function LeaguePage() {
               return (
                 <div
                   key={team.rosterId}
-                  className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4 space-y-3"
+                  className="rounded-2xl border border-zinc-800 bg-black p-3 sm:p-4 space-y-3"
                 >
                   <div className="flex items-center gap-2 pb-2 border-b border-zinc-800">
                     {team.avatar ? (
@@ -2303,7 +2303,9 @@ export default function LeaguePage() {
                     <div className="flex-1">
                       <div className="font-medium text-zinc-100">#{index + 1} {team.displayName}</div>
                       {team.madePlayoffs ? (
-                        <span className="text-xs text-emerald-400 font-medium shadow-lg shadow-emerald-400/40">Playoff Team</span>
+                        <span className="inline-block mt-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-400 border border-emerald-500/60 shadow-md shadow-emerald-400/20">
+                          Playoff Team
+                        </span>
                       ) : (
                         <span className="text-xs text-zinc-400">Missed Playoffs</span>
                       )}
