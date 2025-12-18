@@ -773,7 +773,7 @@ export default function LotteryPage() {
   }
 
   // Share functionality - generate shareable link
-  async function shareLotteryResults(): Promise<void> {
+  function shareLotteryResults(): void {
     if (!lotteryData || !finalResults) {
       setError("No results to share.");
       return;
@@ -782,10 +782,9 @@ export default function LotteryPage() {
     try {
       showToast("Generating share link...", "info");
       
-      // Generate share ID
-      const shareId = `share_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      // Prepare share data
       const shareData = {
-        shareId,
+        id: `share_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
         timestamp: new Date().toISOString(),
         leagueId: lotteryData.leagueId,
         leagueName: lotteryData.leagueInfo?.name ?? "Unknown League",
@@ -794,22 +793,14 @@ export default function LotteryPage() {
         teams: lotteryData.teams,
       };
 
-      // Save to server via API
-      const response = await fetch("/api/lottery/share", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(shareData),
-      });
+      // Encode data as base64 and embed in URL (works across all devices)
+      const encodedData = btoa(JSON.stringify(shareData))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, ''); // URL-safe base64
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to save share data");
-      }
-
-      // Generate shareable URL
-      const shareUrl = `${window.location.origin}/lottery/share/${shareId}`;
+      // Generate shareable URL with encoded data
+      const shareUrl = `${window.location.origin}/lottery/share/${encodedData}`;
 
       // Copy to clipboard
       if (navigator.clipboard && navigator.clipboard.writeText) {

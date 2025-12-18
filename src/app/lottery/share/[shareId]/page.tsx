@@ -33,32 +33,52 @@ export default function ShareLotteryPage({ params }: { params: Promise<{ shareId
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadShareData() {
-      try {
-        const response = await fetch(`/api/lottery/share/${encodeURIComponent(shareId)}`);
-        
-        if (!response.ok) {
-          if (response.status === 404) {
-            setError("Share link not found or has expired.");
-          } else {
-            const errorData = await response.json();
-            setError(errorData.error || "Failed to load shared lottery results.");
-          }
-          setLoading(false);
-          return;
-        }
-
-        const data = (await response.json()) as ShareData;
-        setShareData(data);
-        setError(null);
-      } catch (e: any) {
-        setError("Failed to load shared lottery results. " + (e?.message || ""));
-      } finally {
-        setLoading(false);
+    try {
+      // Decode the data from the URL (base64 encoded)
+      // Add padding if needed
+      let base64 = shareId.replace(/-/g, '+').replace(/_/g, '/');
+      while (base64.length % 4) {
+        base64 += '=';
       }
-    }
 
-    loadShareData();
+      try {
+        const decoded = JSON.parse(atob(base64)) as ShareData;
+        setShareData(decoded);
+        setError(null);
+      } catch (decodeError) {
+        // If decoding fails, try fetching from API (backward compatibility)
+        async function loadFromAPI() {
+          try {
+            const response = await fetch(`/api/lottery/share/${encodeURIComponent(shareId)}`);
+            
+            if (!response.ok) {
+              if (response.status === 404) {
+                setError("Share link not found or has expired.");
+              } else {
+                const errorData = await response.json();
+                setError(errorData.error || "Failed to load shared lottery results.");
+              }
+              setLoading(false);
+              return;
+            }
+
+            const data = (await response.json()) as ShareData;
+            setShareData(data);
+            setError(null);
+          } catch (e: any) {
+            setError("Failed to load shared lottery results. " + (e?.message || ""));
+          } finally {
+            setLoading(false);
+          }
+        }
+        loadFromAPI();
+        return;
+      }
+    } catch (e: any) {
+      setError("Failed to load shared lottery results. " + (e?.message || ""));
+    } finally {
+      setLoading(false);
+    }
   }, [shareId]);
 
   if (loading) {
