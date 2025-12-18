@@ -103,6 +103,43 @@ export default function ShareLotteryPage({ params }: { params: Promise<{ shareId
     loadShareData();
   }, [shareId]);
 
+  // Update meta tags for link previews (keep top pick as surprise)
+  useEffect(() => {
+    if (!shareData) return;
+
+    const description = `Draft lottery results for ${shareData.leagueName} - ${shareData.season}. Top pick: ???`;
+
+    // Update document title
+    document.title = `Draft Lottery Results - ${shareData.leagueName}`;
+
+    // Helper to update/create meta tags
+    const updateMetaTag = (property: string, content: string, isProperty = true) => {
+      const attr = isProperty ? 'property' : 'name';
+      let meta = document.querySelector(`meta[${attr}="${property}"]`);
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.setAttribute(attr, property);
+        document.head.appendChild(meta);
+      }
+      meta.setAttribute('content', content);
+    };
+
+    // Open Graph tags for iMessage/Facebook
+    updateMetaTag('og:title', `Draft Lottery Results - ${shareData.leagueName}`);
+    updateMetaTag('og:description', description);
+    updateMetaTag('og:type', 'website');
+    updateMetaTag('og:site_name', 'Dynasty Lottery');
+    updateMetaTag('og:url', window.location.href);
+    
+    // Twitter Card tags
+    updateMetaTag('twitter:card', 'summary_large_image', false);
+    updateMetaTag('twitter:title', `Draft Lottery Results - ${shareData.leagueName}`, false);
+    updateMetaTag('twitter:description', description, false);
+    
+    // Standard description
+    updateMetaTag('description', description, false);
+  }, [shareData]);
+
   if (loading) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-10">
