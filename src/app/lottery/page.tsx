@@ -160,6 +160,7 @@ export default function LotteryPage() {
   const [visiblePicks, setVisiblePicks] = useState<Set<number>>(new Set());
   const [lowestLotteryWonPick, setLowestLotteryWonPick] = useState<number | null>(null);
   const resultsSectionRef = useRef<HTMLElement | null>(null);
+  const pickRefs = useRef<Map<number, HTMLElement>>(new Map());
   
   // Show toast notification
   function showToast(message: string, type: "success" | "error" | "info" = "info"): void {
@@ -351,13 +352,23 @@ export default function LotteryPage() {
           : null;
         setLowestLotteryWonPick(lowestWon);
         
-        // Scroll to results section to see the animation
+        // On mobile, scroll to bottom of results section to see the animation
+        const isMobile = window.innerWidth < 640; // sm breakpoint
         setTimeout(() => {
           if (resultsSectionRef.current) {
-            resultsSectionRef.current.scrollIntoView({ 
-              behavior: 'smooth', 
-              block: 'start' 
-            });
+            if (isMobile) {
+              // Scroll to bottom on mobile
+              resultsSectionRef.current.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'end' 
+              });
+            } else {
+              // Scroll to top on desktop
+              resultsSectionRef.current.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'start' 
+              });
+            }
           }
         }, 100);
         
@@ -370,6 +381,19 @@ export default function LotteryPage() {
               next.add(result.pick);
               return next;
             });
+            
+            // On mobile, scroll to keep the newly appearing pick in view
+            if (isMobile) {
+              setTimeout(() => {
+                const pickElement = pickRefs.current.get(result.pick);
+                if (pickElement) {
+                  pickElement.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center' 
+                  });
+                }
+              }, 50); // Small delay to ensure element is rendered
+            }
           }, index * 300); // 300ms delay between each pick appearing
         });
         
@@ -1091,6 +1115,13 @@ export default function LotteryPage() {
               return (
                 <div
                   key={result.pick}
+                  ref={(el) => {
+                    if (el) {
+                      pickRefs.current.set(result.pick, el);
+                    } else {
+                      pickRefs.current.delete(result.pick);
+                    }
+                  }}
                   className={`flex flex-col sm:flex-row sm:items-center sm:justify-between rounded-lg ${borderIntensity} bg-emerald-950/40 transition-all duration-300 gap-3 sm:gap-4 ${
                     isRevealed 
                       ? "cursor-default" 
