@@ -2503,9 +2503,9 @@ export default function LeaguePage() {
       
       {/* Mobile Finalize Lottery Button - Bottom */}
       {teams.length > 0 && (
-        <div className="sm:hidden mt-6 sticky bottom-4 z-40">
+        <div className="sm:hidden mt-6">
           <button
-            className="w-full rounded-xl border border-emerald-800 bg-emerald-900 px-4 py-3 text-base font-medium text-emerald-100 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 shadow-lg shadow-emerald-900/50 min-h-[44px]"
+            className="w-full rounded-xl border border-emerald-800 bg-emerald-900 px-4 py-3 text-base font-medium text-emerald-100 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 min-h-[44px]"
             disabled={teams.length === 0}
             onClick={finalizeLottery}
             title="Finalize the lottery configuration and proceed to run the official lottery draw."
