@@ -5,9 +5,16 @@ export default function Home() {
     <main className="min-h-screen">
       {/* Hero Section */}
       <section className="mx-auto max-w-6xl px-3 sm:px-4 py-12 sm:py-20 text-center">
-        <h1 className="text-4xl sm:text-6xl font-bold tracking-tight text-zinc-100 sm:text-7xl">
-          Dynasty Lottery
-        </h1>
+        <div className="flex items-center justify-center gap-4">
+          <h1 className="text-4xl sm:text-6xl font-bold tracking-tight text-zinc-100 sm:text-7xl">
+            Dynasty Lottery
+          </h1>
+          <img
+            src="/logo.png"
+            alt="Dynasty Lottery Logo"
+            className="w-24 h-24 sm:w-32 sm:h-32 md:w-40 md:h-40 flex-shrink-0"
+          />
+        </div>
         <p className="mt-4 sm:mt-6 text-lg sm:text-xl text-zinc-400 sm:text-2xl">
           Fair, transparent, and exciting draft order determination for your dynasty fantasy league
         </p>

@@ -9,7 +9,12 @@ export default function Navigation() {
   return (
     <nav className="w-full p-4 border-b border-zinc-800 bg-zinc-950/40">
       <div className="flex items-center justify-between">
-        <Link href="/" className="text-xl font-bold text-emerald-400 hover:text-emerald-300 transition-colors">
+        <Link href="/" className="flex items-center gap-2 text-xl font-bold text-emerald-400 hover:text-emerald-300 transition-colors">
+          <img
+            src="/logo.png"
+            alt="Dynasty Lottery Logo"
+            className="w-8 h-8 sm:w-10 sm:h-10 flex-shrink-0"
+          />
           Dynasty Lottery
         </Link>
         
