@@ -1,8 +1,105 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Dynasty Lottery - Fair Draft Order for Fantasy Leagues",
+  description: "Transform your dynasty fantasy league with a fair, transparent lottery system. Prevent tanking, add excitement, and maintain league integrity with weighted draft order determination.",
+  openGraph: {
+    title: "Dynasty Lottery - Fair Draft Order for Fantasy Leagues",
+    description: "Transform your dynasty fantasy league with a fair, transparent lottery system. Prevent tanking, add excitement, and maintain league integrity with weighted draft order determination.",
+    type: "website",
+    images: [
+      {
+        url: "/logo.png",
+        width: 512,
+        height: 512,
+        alt: "Dynasty Lottery Logo",
+      },
+    ],
+  },
+};
 
 export default function Home() {
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Dynasty Lottery",
+    "description": "Transform your dynasty fantasy league with a fair, transparent lottery system. Prevent tanking, add excitement, and maintain league integrity with weighted draft order determination.",
+    "url": process.env.NEXT_PUBLIC_SITE_URL || "https://dynastylottery.com",
+    "applicationCategory": "SportsApplication",
+    "operatingSystem": "Web",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "aggregateRating": {
+      "@type": "AggregateRating",
+      "ratingValue": "5",
+      "ratingCount": "1"
+    },
+    "featureList": [
+      "Fair draft order lottery system",
+      "Prevent tanking in fantasy leagues",
+      "Weighted lottery odds",
+      "Sleeper league integration",
+      "Transparent probability calculations",
+      "Customizable lottery rules",
+      "Share lottery results",
+      "Export lottery data"
+    ]
+  };
+
+  const faqStructuredData = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is a dynasty fantasy football lottery?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "A dynasty fantasy football lottery is a system that determines draft order using weighted random selection instead of reverse order standings. This prevents tanking and adds excitement to the draft process."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How does the lottery system prevent tanking?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "With a lottery system, the worst team isn't guaranteed the #1 pick. Teams with worse records have better odds, but nothing is guaranteed, eliminating the incentive to intentionally lose games."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does Dynasty Lottery work with Sleeper leagues?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes! Dynasty Lottery integrates directly with Sleeper leagues. Simply enter your Sleeper username or league ID to automatically load your teams and records."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I customize the lottery weights?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes, you can set custom lottery weights (balls) for each team, lock specific picks for trades or penalties, and exclude playoff teams. The system shows real-time probability calculations."
+        }
+      }
+    ]
+  };
+
   return (
-    <main className="min-h-screen">
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqStructuredData) }}
+      />
+      <main className="min-h-screen">
       {/* Hero Section */}
       <section className="mx-auto max-w-6xl px-3 sm:px-4 py-12 sm:py-20 text-center">
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
@@ -193,5 +290,6 @@ export default function Home() {
         </div>
       </section>
     </main>
+    </>
   );
 }

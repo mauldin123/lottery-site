@@ -1,4 +1,15 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Help & FAQ - Dynasty Lottery",
+  description: "Learn how to use the Dynasty Lottery system for your fantasy football league. Find answers to common questions about lottery configuration, Sleeper integration, and draft order determination.",
+  openGraph: {
+    title: "Help & FAQ - Dynasty Lottery",
+    description: "Learn how to use the Dynasty Lottery system for your fantasy football league. Find answers to common questions about lottery configuration, Sleeper integration, and draft order determination.",
+    type: "website",
+  },
+};
 
 export default function HelpPage() {
   return (
