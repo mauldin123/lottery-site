@@ -1,0 +1,18 @@
+# https://www.robotstxt.org/robotstxt.html
+User-agent: *
+Allow: /
+
+# Disallow API routes and internal pages
+Disallow: /api/
+Disallow: /lottery/share/
+
+# Allow important pages
+Allow: /
+Allow: /league
+Allow: /lottery
+Allow: /history
+Allow: /compare
+Allow: /help
+
+# Sitemap
+Sitemap: https://dynastylottery.com/sitemap.xml
