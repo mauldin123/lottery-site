@@ -224,16 +224,37 @@ export default function ShareLotteryPage({ params }: { params: Promise<{ shareId
                   >
                     <span className={fontSize}>1.{String(result.pick).padStart(2, '0')}</span>
                   </div>
-                  <div>
-                    <p className={`font-semibold ${fontSize} text-emerald-100`}>
-                      {result.teamName}
-                    </p>
-                    {team && (
-                      <p className="text-xs text-emerald-200/60 mt-1">
-                        {team.record.wins}-{team.record.losses}
-                        {team.record.ties > 0 && `-${team.record.ties}`}
-                      </p>
+                  <div className="flex items-center gap-3">
+                    {team?.avatar ? (
+                      <img 
+                        src={team.avatar} 
+                        alt={`${result.teamName} avatar`}
+                        className="w-10 h-10 rounded-full border border-emerald-700 object-cover flex-shrink-0"
+                        onError={(e) => {
+                          // Replace with fallback on error
+                          const img = e.target as HTMLImageElement;
+                          const fallback = document.createElement('div');
+                          fallback.className = 'w-10 h-10 rounded-full border border-emerald-700 bg-emerald-900/50 flex items-center justify-center text-emerald-300 text-sm font-medium flex-shrink-0';
+                          fallback.textContent = result.teamName.charAt(0).toUpperCase();
+                          img.parentNode?.replaceChild(fallback, img);
+                        }}
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full border border-emerald-700 bg-emerald-900/50 flex items-center justify-center text-emerald-300 text-sm font-medium flex-shrink-0">
+                        {result.teamName.charAt(0).toUpperCase()}
+                      </div>
                     )}
+                    <div>
+                      <p className={`font-semibold ${fontSize} text-emerald-100`}>
+                        {result.teamName}
+                      </p>
+                      {team && (
+                        <p className="text-xs text-emerald-200/60 mt-1">
+                          {team.record.wins}-{team.record.losses}
+                          {team.record.ties > 0 && `-${team.record.ties}`}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="mt-2 sm:mt-0 text-right">
