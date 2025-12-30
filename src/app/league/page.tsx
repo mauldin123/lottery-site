@@ -172,6 +172,8 @@ export default function LeaguePage() {
   
   // Ref for league details section to scroll to after loading
   const leagueDetailsRef = useRef<HTMLElement | null>(null);
+  // Ref for leagues list section to scroll to after loading
+  const leaguesListRef = useRef<HTMLDivElement | null>(null);
 
   // Look up a Sleeper user by username, then fetch their leagues for the chosen season
   async function findLeaguesByUsername(retryCount: number = 0): Promise<void> {
@@ -242,6 +244,16 @@ export default function LeaguePage() {
       setLeagues(leaguesJson.leagues);
       if (leaguesJson.leagues.length === 0) {
         setError("No leagues found for that user in the selected season.");
+      } else {
+        // Scroll to leagues list after loading - wait for DOM to update
+        setTimeout(() => {
+          if (leaguesListRef.current) {
+            leaguesListRef.current.scrollIntoView({ 
+              behavior: 'smooth', 
+              block: 'start' 
+            });
+          }
+        }, 150);
       }
     } catch (e: any) {
       const errorMsg = e?.message || "Unexpected error while loading leagues.";
@@ -1411,7 +1423,7 @@ export default function LeaguePage() {
           ) : null}
 
           {leagues.length > 0 ? (
-            <div className="mt-5">
+            <div ref={leaguesListRef} className="mt-5">
               <div className="text-sm text-zinc-300">Pick a league</div>
               <div className="mt-3 grid gap-3">
                 {leagues.map((l) => (
