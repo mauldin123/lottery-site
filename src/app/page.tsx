@@ -4,10 +4,14 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Fantasy Football Draft Lottery Generator | Sleeper League Lottery Tool",
   description: "Free fantasy football draft lottery generator for Sleeper leagues. Create fair, weighted draft orders to prevent tanking. NBA-style lottery system with customizable odds. Works with Sleeper, ESPN, Yahoo, and all fantasy platforms.",
+  alternates: {
+    canonical: "https://dynastylottery.com",
+  },
   openGraph: {
     title: "Fantasy Football Draft Lottery Generator | Sleeper League Lottery Tool",
     description: "Free fantasy football draft lottery generator for Sleeper leagues. Create fair, weighted draft orders to prevent tanking. NBA-style lottery system with customizable odds. Works with Sleeper, ESPN, Yahoo, and all fantasy platforms.",
     type: "website",
+    url: "https://dynastylottery.com",
     images: [
       {
         url: "/logo.png",
