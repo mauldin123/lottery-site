@@ -2,8 +2,8 @@ import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Dynasty Lottery - Fair Draft Order for Fantasy Leagues",
-  description: "Transform your dynasty fantasy league with a fair, transparent lottery system. Prevent tanking, add excitement, and maintain league integrity with weighted draft order determination.",
+  title: "Fantasy Football Draft Lottery Generator | Sleeper League Lottery Tool",
+  description: "Free fantasy football draft lottery generator for Sleeper leagues. Create fair, weighted draft orders to prevent tanking. NBA-style lottery system with customizable odds. Works with Sleeper, ESPN, Yahoo, and all fantasy platforms.",
   openGraph: {
     title: "Dynasty Lottery - Fair Draft Order for Fantasy Leagues",
     description: "Transform your dynasty fantasy league with a fair, transparent lottery system. Prevent tanking, add excitement, and maintain league integrity with weighted draft order determination.",
@@ -102,18 +102,18 @@ export default function Home() {
       <main className="min-h-screen">
       {/* Hero Section */}
       <section className="mx-auto max-w-6xl px-3 sm:px-4 py-12 sm:py-20 text-center">
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+        <div className="flex flex-col items-center justify-center gap-4 sm:gap-6">
           <img
             src="/logo.png"
             alt="Dynasty Lottery Logo"
-            className="w-20 h-20 sm:w-32 sm:h-32 md:w-40 md:h-40 flex-shrink-0 order-1 sm:order-2"
+            className="w-24 h-24 sm:w-32 sm:h-32 md:w-40 md:h-40 flex-shrink-0"
           />
-          <h1 className="text-4xl sm:text-6xl font-bold tracking-tight text-zinc-100 sm:text-7xl order-2 sm:order-1">
-            Dynasty Lottery
+          <h1 className="text-4xl sm:text-6xl font-bold tracking-tight text-zinc-100 sm:text-7xl">
+            Dynasty Fantasy Football Draft Lottery Generator
           </h1>
         </div>
         <p className="mt-4 sm:mt-6 text-lg sm:text-xl text-zinc-400 sm:text-2xl">
-          Fair, transparent, and exciting draft order determination for your dynasty fantasy league
+          Free Sleeper league lottery tool. Create fair, weighted draft orders to prevent tanking in your dynasty fantasy football league.
         </p>
         <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
           <Link
@@ -131,15 +131,27 @@ export default function Home() {
         </div>
       </section>
 
+      {/* SEO Rich Content Section */}
+      <section className="mx-auto max-w-6xl px-4 py-16">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl sm:text-4xl font-bold text-zinc-100 mb-4">
+            Free Fantasy Football Draft Lottery Generator for Sleeper Leagues
+          </h2>
+          <p className="mt-4 text-lg sm:text-xl text-zinc-400 max-w-3xl mx-auto">
+            Our <strong className="text-emerald-400">fantasy football draft lottery generator</strong> is the perfect solution for <strong className="text-emerald-400">Sleeper league</strong> commissioners who want to create a fair, transparent draft order. Unlike traditional reverse-order drafts that encourage tanking, our <strong className="text-emerald-400">weighted lottery system</strong> uses an NBA-style draft lottery to determine draft positions, keeping your <strong className="text-emerald-400">dynasty fantasy football league</strong> competitive all season long.
+          </p>
+        </div>
+      </section>
+
       {/* Why Lottery Section */}
       <section className="mx-auto max-w-6xl px-4 py-16">
         <div className="text-center">
           <h2 className="text-4xl font-bold text-zinc-100">
-            Why Use a Lottery System?
+            Why Use a Draft Lottery System?
           </h2>
           <p className="mt-4 text-lg text-zinc-400">
             Traditional reverse-order drafts can lead to tanking and unfair advantages. 
-            A lottery system brings excitement, fairness, and integrity to your dynasty league.
+            A <strong className="text-emerald-400">lottery system</strong> brings excitement, fairness, and integrity to your <strong className="text-emerald-400">dynasty fantasy football league</strong>.
           </p>
         </div>
 
@@ -241,33 +253,68 @@ export default function Home() {
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-900 text-2xl font-bold text-emerald-100 border border-emerald-800">
                 1
               </div>
-              <h3 className="text-xl font-semibold text-zinc-100 mb-2">Load Your League</h3>
+              <h3 className="text-xl font-semibold text-zinc-100 mb-2">Load Your Sleeper League</h3>
               <p className="text-zinc-400">
-                Connect your Sleeper league or enter your league ID. We'll automatically load 
-                all teams and their records.
+                Connect your <strong className="text-emerald-400">Sleeper fantasy football league</strong> or enter your league ID. Our <strong className="text-emerald-400">draft lottery generator</strong> automatically loads all teams and their records from the Sleeper API.
               </p>
             </div>
             <div className="text-center">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-900 text-2xl font-bold text-emerald-100 border border-emerald-800">
                 2
               </div>
-              <h3 className="text-xl font-semibold text-zinc-100 mb-2">Configure Lottery</h3>
+              <h3 className="text-xl font-semibold text-zinc-100 mb-2">Configure Weighted Lottery</h3>
               <p className="text-zinc-400">
-                Set lottery weights (balls) for each team, lock specific picks, and customize 
-                which teams are eligible. See real-time probability calculations.
+                Set <strong className="text-emerald-400">lottery weights (balls)</strong> for each team, lock specific picks, and customize which teams are eligible. See real-time <strong className="text-emerald-400">probability calculations</strong> for each draft position.
               </p>
             </div>
             <div className="text-center">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-900 text-2xl font-bold text-emerald-100 border border-emerald-800">
                 3
               </div>
-              <h3 className="text-xl font-semibold text-zinc-100 mb-2">Run the Draw</h3>
+              <h3 className="text-xl font-semibold text-zinc-100 mb-2">Run the Draft Lottery</h3>
               <p className="text-zinc-400">
-                Finalize your configuration and run the official lottery. Reveal picks one by one 
-                for maximum drama, or reveal all at once. Save and export your results.
+                Finalize your configuration and run the official <strong className="text-emerald-400">weighted draft lottery</strong>. Reveal picks one by one for maximum drama, or reveal all at once. Save and export your results to share with your league.
               </p>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Learn More Section */}
+      <section className="mx-auto max-w-6xl px-4 py-16">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl sm:text-4xl font-bold text-zinc-100 mb-4">
+            Learn More About Draft Lotteries
+          </h2>
+          <p className="text-lg text-zinc-400 max-w-2xl mx-auto">
+            Comprehensive guides to help you understand and implement a draft lottery system in your fantasy football league.
+          </p>
+        </div>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <Link href="/guides/how-to-use-draft-lottery" className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-6 hover:border-emerald-800 hover:bg-zinc-950/60 transition-all">
+            <h3 className="text-xl font-semibold text-zinc-100 mb-2">
+              How to Use Draft Lottery Generator
+            </h3>
+            <p className="text-zinc-400 text-sm">
+              Step-by-step guide on setting up and running a draft lottery for your Sleeper league.
+            </p>
+          </Link>
+          <Link href="/guides/prevent-tanking" className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-6 hover:border-emerald-800 hover:bg-zinc-950/60 transition-all">
+            <h3 className="text-xl font-semibold text-zinc-100 mb-2">
+              How to Prevent Tanking
+            </h3>
+            <p className="text-zinc-400 text-sm">
+              Learn why tanking happens and how a weighted lottery system eliminates it completely.
+            </p>
+          </Link>
+          <Link href="/guides" className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-6 hover:border-emerald-800 hover:bg-zinc-950/60 transition-all">
+            <h3 className="text-xl font-semibold text-zinc-100 mb-2">
+              View All Guides
+            </h3>
+            <p className="text-zinc-400 text-sm">
+              Browse all our guides on draft lotteries, Sleeper integration, and league management.
+            </p>
+          </Link>
         </div>
       </section>
 
@@ -279,7 +326,7 @@ export default function Home() {
           </h2>
           <p className="text-lg text-emerald-200/80 mb-8 max-w-2xl mx-auto">
             Join leagues across the dynasty community who have made the switch to a fair, 
-            exciting lottery system. Get started in minutes.
+            exciting lottery system. Get started in minutes with our <strong className="text-emerald-100">free Sleeper league lottery tool</strong>.
           </p>
           <Link
             href="/league"

@@ -2,8 +2,8 @@ import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Help & FAQ - Dynasty Lottery",
-  description: "Learn how to use the Dynasty Lottery system for your fantasy football league. Find answers to common questions about lottery configuration, Sleeper integration, and draft order determination.",
+  title: "Help & FAQ | Fantasy Football Draft Lottery Generator Guide",
+  description: "Get help using our fantasy football draft lottery generator for Sleeper leagues. Find answers to common questions about lottery configuration, weighted odds, and preventing tanking.",
   openGraph: {
     title: "Help & FAQ - Dynasty Lottery",
     description: "Learn how to use the Dynasty Lottery system for your fantasy football league. Find answers to common questions about lottery configuration, Sleeper integration, and draft order determination.",
@@ -19,6 +19,20 @@ export default function HelpPage() {
         <p className="mt-2 text-zinc-400">
           Learn how to use the Dynasty Lottery system and find answers to common questions.
         </p>
+        <div className="mt-4 flex gap-4 flex-wrap">
+          <Link 
+            href="/guides" 
+            className="inline-block rounded-lg border border-emerald-800 bg-emerald-950/20 px-4 py-2 text-emerald-300 hover:text-emerald-200 hover:bg-emerald-950/40 transition-all font-medium"
+          >
+            📚 View Comprehensive Guides
+          </Link>
+          <Link 
+            href="/guides/how-to-use-draft-lottery" 
+            className="inline-block rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-2 text-zinc-300 hover:text-zinc-200 hover:bg-zinc-950/60 transition-all"
+          >
+            How to Use Draft Lottery Generator
+          </Link>
+        </div>
       </div>
 
       {/* How It Works Section */}

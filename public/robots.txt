@@ -13,6 +13,7 @@ Allow: /lottery
 Allow: /history
 Allow: /compare
 Allow: /help
+Allow: /guides
 
 # Sitemap
 Sitemap: https://dynastylottery.com/sitemap.xml
