@@ -88,9 +88,7 @@ export const metadata: Metadata = {
     },
   },
   verification: {
-    // Add your verification codes here when you get them
-    // google: "your-google-verification-code",
-    // yandex: "your-yandex-verification-code",
+    google: "pE13e52JsWRVFkttg-xWzhDUzternHt7WS9a9dz25ss",
   },
 };
 
@@ -103,6 +101,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="bg-zinc-900 text-zinc-100">
       <head>
+        <meta name="google-site-verification" content="pE13e52JsWRVFkttg-xWzhDUzternHt7WS9a9dz25ss" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/logo.png" />
