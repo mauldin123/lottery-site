@@ -697,7 +697,10 @@ export default function LeaguePage() {
   // Show toast notification
   function showToast(message: string, type: "success" | "error" | "info" = "info"): void {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
+    // Only auto-dismiss success and info toasts, errors stay until manually dismissed
+    if (type !== "error") {
+      setTimeout(() => setToast(null), 4000);
+    }
   }
 
   // Validate lottery configuration
@@ -750,14 +753,14 @@ export default function LeaguePage() {
   // Run a single lottery simulation
   function simulateLotteryDraw(): void {
     if (teams.length === 0) {
-      setError("No teams loaded. Please load a league first.");
+      showToast("No teams loaded. Please load a league first.", "error");
       return;
     }
     
     // Validate configuration
     const validation = validateLotteryConfig();
     if (!validation.valid) {
-      setError(validation.error || "Invalid lottery configuration.");
+      showToast(validation.error || "Invalid lottery configuration.", "error");
       return;
     }
     
@@ -801,7 +804,7 @@ export default function LeaguePage() {
 
         // Need at least some eligible teams OR locked picks to run lottery
         if (eligibleTeams.length === 0 && lockedPicks.size === 0) {
-          setError("No eligible teams for lottery. Please configure at least one team with balls > 0, or set up locked picks.");
+          showToast("No eligible teams for lottery. Please configure at least one team with balls > 0, or set up locked picks.", "error");
           setIsSimulating(false);
           return;
         }
@@ -922,8 +925,7 @@ export default function LeaguePage() {
         setError(null);
         showToast("Lottery simulation completed!", "success");
       } catch (e: any) {
-        setError("Failed to simulate lottery. " + (e?.message || ""));
-        showToast("Simulation failed. Please check your configuration.", "error");
+        showToast("Failed to simulate lottery. " + (e?.message || ""), "error");
       } finally {
         setIsSimulating(false);
       }
@@ -933,7 +935,7 @@ export default function LeaguePage() {
   // Calculate all permutations using simulation
   function calculateAllPermutations(): void {
     if (teams.length === 0) {
-      setError("No teams loaded. Please load a league first.");
+      showToast("No teams loaded. Please load a league first.", "error");
       return;
     }
 
@@ -974,7 +976,7 @@ export default function LeaguePage() {
         });
 
         if (eligibleTeams.length === 0 && lockedPicks.size === 0) {
-          setError("No eligible teams for lottery. Please configure at least one team with balls > 0, or set up locked picks.");
+          showToast("No eligible teams for lottery. Please configure at least one team with balls > 0, or set up locked picks.", "error");
           setIsCalculatingPermutations(false);
           return;
         }
@@ -1081,9 +1083,8 @@ export default function LeaguePage() {
         setIsCalculatingPermutations(false);
         showToast("Probability analysis completed!", "success");
       } catch (e: any) {
-        setError("Failed to calculate permutations. " + (e?.message || ""));
+        showToast("Failed to calculate permutations. " + (e?.message || ""), "error");
         setIsCalculatingPermutations(false);
-        showToast("Failed to calculate permutations.", "error");
       }
     }, 100);
   }
@@ -1092,7 +1093,7 @@ export default function LeaguePage() {
   // Save configuration for comparison (without running lottery)
   function saveConfigurationForComparison(): void {
     if (!selectedLeagueId || teams.length === 0) {
-      setError("No league loaded. Please load a league first.");
+      showToast("No league loaded. Please load a league first.", "error");
       return;
     }
 
@@ -1120,25 +1121,25 @@ export default function LeaguePage() {
       // Show success message
       alert(`Configuration saved! You can compare it with others on the Comparison page.`);
     } catch (e: any) {
-      setError("Failed to save configuration. " + (e?.message || ""));
+      showToast("Failed to save configuration. " + (e?.message || ""), "error");
     }
   }
 
   function finalizeLottery(): void {
     if (teams.length === 0) {
-      setError("No teams loaded. Please load a league first.");
+      showToast("No teams loaded. Please load a league first.", "error");
       return;
     }
 
     if (!selectedLeagueId) {
-      setError("No league selected.");
+      showToast("No league selected.", "error");
       return;
     }
 
     // Validate configuration
     const validation = validateLotteryConfig();
     if (!validation.valid) {
-      setError(validation.error || "Invalid lottery configuration.");
+      showToast(validation.error || "Invalid lottery configuration.", "error");
       return;
     }
 
@@ -1151,7 +1152,7 @@ export default function LeaguePage() {
     );
 
     if (!hasEligibleTeams && !hasLockedPicks) {
-      setError("No eligible teams for lottery. Please configure at least one team with balls > 0, or set up locked picks.");
+      showToast("No eligible teams for lottery. Please configure at least one team with balls > 0, or set up locked picks.", "error");
       return;
     }
 
@@ -1170,10 +1171,9 @@ export default function LeaguePage() {
       setTimeout(() => {
         router.push("/lottery");
       }, 500);
-    } catch (e: any) {
-      setError("Failed to save lottery configuration. " + (e?.message || ""));
-      showToast("Failed to save configuration.", "error");
-    }
+      } catch (e: any) {
+        showToast("Failed to save lottery configuration. " + (e?.message || ""), "error");
+      }
   }
   
   // Debounced update for balls input
@@ -2225,7 +2225,7 @@ export default function LeaguePage() {
                               // Validate max value
                               const MAX_BALLS = 10000;
                               if (numValue > MAX_BALLS) {
-                                setError(`Balls value cannot exceed ${MAX_BALLS.toLocaleString()}.`);
+                                showToast(`Balls value cannot exceed ${MAX_BALLS.toLocaleString()}.`, "error");
                                 return;
                               }
                               debouncedUpdateBalls(team.rosterId, numValue);
@@ -2270,7 +2270,7 @@ export default function LeaguePage() {
                                   updateLotteryConfig(team.rosterId, {
                                     balls: MAX_BALLS,
                                   });
-                                  setError(`Balls value cannot exceed ${MAX_BALLS.toLocaleString()}.`);
+                                  showToast(`Balls value cannot exceed ${MAX_BALLS.toLocaleString()}.`, "error");
                                 }
                               } else {
                                 // Invalid input, reset to current config value
@@ -2333,15 +2333,13 @@ export default function LeaguePage() {
                             if (slotValue) {
                               const pickNum = parseManualSlot(slotValue);
                               if (pickNum === null || pickNum < 1 || pickNum > teams.length) {
-                                setError(`Invalid manual slot: ${slotValue}. Must be between 1.01 and 1.${String(teams.length).padStart(2, '0')}`);
+                                showToast(`Invalid manual slot: ${slotValue}. Must be between 1.01 and 1.${String(teams.length).padStart(2, '0')}`, "error");
                               } else {
                                 // Check for duplicates
                                 const validation = validateLotteryConfig();
-                                if (!validation.valid && validation.error) {
-                                  setError(validation.error);
-                                } else {
-                                  setError(null);
-                                }
+                                  if (!validation.valid && validation.error) {
+                                    showToast(validation.error, "error");
+                                  }
                               }
                             }
                           }}
@@ -2536,7 +2534,7 @@ export default function LeaguePage() {
                           if (!isNaN(numValue) && numValue >= 0) {
                             const MAX_BALLS = 10000;
                             if (numValue > MAX_BALLS) {
-                              setError(`Balls value cannot exceed ${MAX_BALLS.toLocaleString()}.`);
+                              showToast(`Balls value cannot exceed ${MAX_BALLS.toLocaleString()}.`, "error");
                               return;
                             }
                             debouncedUpdateBalls(team.rosterId, numValue);
@@ -2569,7 +2567,7 @@ export default function LeaguePage() {
                                   return updated;
                                 });
                                 updateLotteryConfig(team.rosterId, { balls: MAX_BALLS });
-                                setError(`Balls value cannot exceed ${MAX_BALLS.toLocaleString()}.`);
+                                showToast(`Balls value cannot exceed ${MAX_BALLS.toLocaleString()}.`, "error");
                               }
                             } else {
                               setBallsInputValues((prev) => {
@@ -2627,9 +2625,8 @@ export default function LeaguePage() {
                             if (slotValue) {
                               const pickNum = parseManualSlot(slotValue);
                               if (pickNum === null || pickNum < 1 || pickNum > teams.length) {
-                                setError(`Invalid manual slot: ${slotValue}. Must be between 1.01 and 1.${String(teams.length).padStart(2, '0')}`);
+                                showToast(`Invalid manual slot: ${slotValue}. Must be between 1.01 and 1.${String(teams.length).padStart(2, '0')}`, "error");
                               } else {
-                                setError(null);
                               }
                             }
                           }}

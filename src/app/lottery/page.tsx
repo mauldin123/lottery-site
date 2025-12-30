@@ -243,7 +243,10 @@ export default function LotteryPage() {
   // Show toast notification
   function showToast(message: string, type: "success" | "error" | "info" = "info"): void {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
+    // Only auto-dismiss success and info toasts, errors stay until manually dismissed
+    if (type !== "error") {
+      setTimeout(() => setToast(null), 4000);
+    }
   }
 
   useEffect(() => {
@@ -571,7 +574,7 @@ export default function LotteryPage() {
           }, index * 300); // 300ms delay between each pick appearing
         });
         
-        showToast("Lottery draw completed! Click picks to reveal.", "success");
+        // No success toast - user can see the results directly
       } catch (e: any) {
         setError("Failed to run lottery. " + (e?.message || ""));
         showToast("Failed to run lottery.", "error");
