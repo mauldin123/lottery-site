@@ -5,8 +5,8 @@ export const metadata: Metadata = {
   title: "Fantasy Football Draft Lottery Generator | Sleeper League Lottery Tool",
   description: "Free fantasy football draft lottery generator for Sleeper leagues. Create fair, weighted draft orders to prevent tanking. NBA-style lottery system with customizable odds. Works with Sleeper, ESPN, Yahoo, and all fantasy platforms.",
   openGraph: {
-    title: "Dynasty Lottery - Fair Draft Order for Fantasy Leagues",
-    description: "Transform your dynasty fantasy league with a fair, transparent lottery system. Prevent tanking, add excitement, and maintain league integrity with weighted draft order determination.",
+    title: "Fantasy Football Draft Lottery Generator | Sleeper League Lottery Tool",
+    description: "Free fantasy football draft lottery generator for Sleeper leagues. Create fair, weighted draft orders to prevent tanking. NBA-style lottery system with customizable odds. Works with Sleeper, ESPN, Yahoo, and all fantasy platforms.",
     type: "website",
     images: [
       {
