@@ -163,9 +163,12 @@ export default function LeaguePage() {
   
   // Debounce timer refs
   const ballsDebounceTimer = useRef<Map<number, NodeJS.Timeout>>(new Map());
+  const percentDebounceTimer = useRef<Map<number, NodeJS.Timeout>>(new Map());
   
   // Local input state for balls fields (to prevent lag while typing)
   const [ballsInputValues, setBallsInputValues] = useState<Map<number, string>>(new Map());
+  // Local input state for percentage fields
+  const [percentInputValues, setPercentInputValues] = useState<Map<number, string>>(new Map());
   
   // Flag to prevent saving during initial restore
   const isRestoringRef = useRef(false);
@@ -448,17 +451,21 @@ export default function LeaguePage() {
       
       // Initialize balls input values
       const initialInputValues = new Map<number, string>();
+      const initialPercentValues = new Map<number, string>();
       orderedTeams.forEach((team) => {
         const config = configsWithPercentages.get(team.rosterId);
         if (config) {
           initialInputValues.set(team.rosterId, config.balls === 0 ? "" : String(config.balls));
+          initialPercentValues.set(team.rosterId, config.calculatedPercent === 0 ? "" : String(Math.round(config.calculatedPercent)));
         }
       });
       setBallsInputValues(initialInputValues);
+      setPercentInputValues(initialPercentValues);
 
       setSelectedLeagueId(id);
       setLeagueInfo(leagueJson.league ?? null);
-      setTeams(orderedTeams);
+      // Reverse order so worst team is at top, best team at bottom
+      setTeams([...orderedTeams].reverse());
       
       // Scroll to league details section after loading
       setTimeout(() => {
@@ -513,7 +520,8 @@ export default function LeaguePage() {
       const config = updated.get(rosterId);
       if (config && totalBalls > 0) {
         // Calculate percentage: (balls / totalBalls) * 100
-        const percent = Math.round((balls / totalBalls) * 100);
+        // Use toFixed(1) for one decimal place, then parse to number to remove trailing zeros
+        const percent = parseFloat(((balls / totalBalls) * 100).toFixed(1));
         updated.set(rosterId, { ...config, calculatedPercent: percent });
       } else if (config) {
         updated.set(rosterId, { ...config, calculatedPercent: 0 });
@@ -555,12 +563,16 @@ export default function LeaguePage() {
         
         // Recalculate percentages whenever balls or eligibility changes
         const recalculated = calculatePercentagesFromBalls(updated);
+        
+        // Don't sync percentage input values - allow users to edit percentages independently
+        // The displayed percentage (calculatedPercent) will update, but input values stay as user typed
+        
         return recalculated;
       }
       return updated;
     });
     
-    // Sync input value when config updates (for external updates)
+    // Sync input values when config updates (for external updates)
     if (updates.balls !== undefined) {
       setBallsInputValues((prev) => {
         const updated = new Map(prev);
@@ -568,6 +580,38 @@ export default function LeaguePage() {
         return updated;
       });
     }
+  }
+
+  // Update lottery config from percentage input
+  // Calculate balls automatically from percentages using a fixed scale
+  function updateFromPercentage(rosterId: number, targetPercent: number) {
+    setLotteryConfigs((prev) => {
+      const configs = new Map(prev);
+      const currentConfig = configs.get(rosterId);
+      
+      if (!currentConfig || !currentConfig.includeInLottery || currentConfig.isLockedPick) {
+        return configs;
+      }
+
+      // Use a fixed base total for calculations - this allows independent percentage setting
+      const BASE_TOTAL = 1000;
+      
+      // Calculate balls for this team based on target percentage
+      // Formula: balls = (targetPercent / 100) * BASE_TOTAL
+      const newBalls = targetPercent <= 0 
+        ? 1 
+        : Math.max(1, Math.round((targetPercent / 100) * BASE_TOTAL));
+      
+      configs.set(rosterId, { ...currentConfig, balls: newBalls });
+
+      // Don't validate total here - allow users to set any percentages
+      // Validation will happen when they try to finalize the lottery
+
+      // Recalculate percentages from the new balls distribution
+      const recalculated = calculatePercentagesFromBalls(configs);
+      
+      return recalculated;
+    });
   }
 
   // Get lottery config for a team, with defaults
@@ -749,6 +793,25 @@ export default function LeaguePage() {
           return { valid: false, error: `${team.displayName} has an invalid manual slot: ${config.manualSlot}` };
         }
       }
+    }
+    
+    // Check if total percentages exceed 100%
+    let totalPercent = 0;
+    teams.forEach((team) => {
+      const config = getLotteryConfig(team.rosterId);
+      if (config.includeInLottery && !config.isLockedPick) {
+        const percentValue = percentInputValues.get(team.rosterId);
+        if (percentValue && percentValue !== "") {
+          const percent = parseFloat(percentValue);
+          if (!isNaN(percent) && percent > 0) {
+            totalPercent += percent;
+          }
+        }
+      }
+    });
+    
+    if (totalPercent > 100.1) { // Small buffer for rounding
+      return { valid: false, error: `Total percentages exceed 100% (${totalPercent.toFixed(1)}%). Please adjust your percentages before finalizing.` };
     }
     
     // Check for max balls value (prevent unreasonably large numbers)
@@ -1205,12 +1268,31 @@ export default function LeaguePage() {
     
     ballsDebounceTimer.current.set(rosterId, timer);
   }, []);
+
+  // Debounced update for percentage input
+  const debouncedUpdateFromPercentage = useCallback((rosterId: number, percent: number) => {
+    // Clear existing timer for this team
+    const existingTimer = percentDebounceTimer.current.get(rosterId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+    
+    // Set new timer
+    const timer = setTimeout(() => {
+      updateFromPercentage(rosterId, percent);
+      percentDebounceTimer.current.delete(rosterId);
+    }, 500); // 500ms debounce
+    
+    percentDebounceTimer.current.set(rosterId, timer);
+  }, []);
   
   // Cleanup debounce timers on unmount
   useEffect(() => {
     return () => {
       ballsDebounceTimer.current.forEach((timer) => clearTimeout(timer));
       ballsDebounceTimer.current.clear();
+      percentDebounceTimer.current.forEach((timer) => clearTimeout(timer));
+      percentDebounceTimer.current.clear();
     };
   }, []);
   
@@ -1283,9 +1365,18 @@ export default function LeaguePage() {
           savedConfigs = new Map<number, LotteryTeamConfig>(savedData.lotteryConfigs);
           
           // Restore balls input values
-          if (savedData.ballsInputValues) {
-            savedInputValues = new Map<number, string>(savedData.ballsInputValues);
-          }
+        if (savedData.ballsInputValues) {
+          savedInputValues = new Map<number, string>(savedData.ballsInputValues);
+        }
+        
+        // Initialize percentage input values from recalculated configs
+        const savedPercentValues = new Map<number, string>();
+        if (savedConfigs) {
+          const configsWithPercentages = calculatePercentagesFromBalls(savedConfigs);
+          configsWithPercentages.forEach((config, rosterId) => {
+            savedPercentValues.set(rosterId, config.calculatedPercent === 0 ? "" : String(config.calculatedPercent));
+          });
+        }
           
           // Reload the league to get fresh team data
           loadLeagueById(savedData.selectedLeagueId).then(() => {
@@ -1314,6 +1405,16 @@ export default function LeaguePage() {
               // Restore input values
               if (savedInputValues) {
                 setBallsInputValues(savedInputValues);
+              }
+              
+              // Set percentage input values from recalculated configs
+              if (savedConfigs) {
+                const configsWithPercentages = calculatePercentagesFromBalls(savedConfigs);
+                const restoredPercentValues = new Map<number, string>();
+                configsWithPercentages.forEach((config, rosterId) => {
+                  restoredPercentValues.set(rosterId, config.calculatedPercent === 0 ? "" : String(config.calculatedPercent));
+                });
+                setPercentInputValues(restoredPercentValues);
               }
               
               // Re-enable saving after restore completes
@@ -1669,7 +1770,7 @@ export default function LeaguePage() {
                   <div className="font-medium text-zinc-100">{t.displayName}</div>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
-                  <span className="text-zinc-400">#{index + 1}</span>
+                  <span className="text-zinc-400">#{teams.length - index}</span>
                   {t.madePlayoffs ? (
                     <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-400 border border-emerald-500/60 shadow-md shadow-emerald-400/20">
                       Playoff Team
@@ -1863,7 +1964,7 @@ export default function LeaguePage() {
                         >
                           <td className="px-2 sm:px-3 py-2 text-blue-100 font-medium sticky left-0 bg-blue-950/40 z-10">
                             <div className="flex items-center gap-1 sm:gap-2">
-                              <span className="text-xs text-blue-300/70">#{index + 1}</span>
+                              <span className="text-xs text-blue-300/70">#{teams.length - index}</span>
                               <span className="text-xs truncate max-w-[80px] sm:max-w-none">{team.displayName}</span>
                             </div>
                           </td>
@@ -1919,7 +2020,7 @@ export default function LeaguePage() {
                   
                   return (
                     <div key={team.rosterId} className="rounded-lg border border-blue-800/50 bg-blue-950/10 p-4">
-                      <div className="font-medium text-blue-100 mb-3">#{index + 1} {team.displayName}</div>
+                      <div className="font-medium text-blue-100 mb-3">#{teams.length - index} {team.displayName}</div>
                       <div className="space-y-2">
                         {topPicks.map(([pick, prob]) => {
                           const isMaxProb = pick === maxPick && maxProb > 0;
@@ -2007,6 +2108,34 @@ export default function LeaguePage() {
 
           {/* Team lottery configuration table - Desktop */}
           <div className="hidden sm:block mt-6 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 relative">
+            {/* Total Percentage Display */}
+            {(() => {
+              let totalPercent = 0;
+              teams.forEach((team) => {
+                const config = getLotteryConfig(team.rosterId);
+                if (config.includeInLottery && !config.isLockedPick) {
+                  const percentValue = percentInputValues.get(team.rosterId);
+                  if (percentValue && percentValue !== "") {
+                    const percent = parseFloat(percentValue);
+                    if (!isNaN(percent) && percent > 0) {
+                      totalPercent += percent;
+                    }
+                  }
+                }
+              });
+              return (
+                <div className={`mb-3 text-sm ${totalPercent > 100.1 ? 'text-red-400' : totalPercent < 99.9 ? 'text-yellow-400' : 'text-green-400'}`}>
+                  <span className="font-semibold">Total Percentage: </span>
+                  <span>{totalPercent.toFixed(1)}%</span>
+                  {totalPercent > 100.1 && (
+                    <span className="ml-2 text-xs">⚠️ Exceeds 100%</span>
+                  )}
+                  {totalPercent < 99.9 && totalPercent > 0 && (
+                    <span className="ml-2 text-xs">⚠️ Less than 100%</span>
+                  )}
+                </div>
+              );
+            })()}
             <table className="w-full border-collapse text-xs sm:text-sm">
               <thead>
                 <tr className="border-b border-zinc-800">
@@ -2022,15 +2151,15 @@ export default function LeaguePage() {
                   </th>
                   <th
                     className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-zinc-300 cursor-help"
-                    title="The number of lottery balls (combinations) assigned to this team. More balls = better odds. Like the NBA lottery system, where worse teams get more balls."
+                    title="Set the percentage chance for this team to get the #1 pick. Balls are calculated automatically from percentages."
                   >
-                    Balls
+                    Percentage
                   </th>
                   <th
                     className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-zinc-300 cursor-help"
-                    title="The calculated percentage chance this team has in the lottery, based on their balls divided by the total balls in the pool. This is automatically computed."
+                    title="The number of lottery balls assigned to this team, calculated automatically from the percentage you entered."
                   >
-                    Odds %
+                    Balls
                   </th>
                   <th
                     className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs sm:text-sm font-semibold text-zinc-300 cursor-help"
@@ -2057,7 +2186,7 @@ export default function LeaguePage() {
                       className="border-b border-zinc-800/50 hover:bg-zinc-900/30"
                     >
                       <td className="px-2 sm:px-4 py-2 sm:py-3">
-                        <div className="flex items-center gap-1.5 sm:gap-2">
+                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                           {team.avatar ? (
                             <img 
                               src={team.avatar} 
@@ -2077,18 +2206,25 @@ export default function LeaguePage() {
                               {team.displayName.charAt(0).toUpperCase()}
                             </div>
                           )}
-                          <span className="text-xs sm:text-sm font-medium text-zinc-100">
-                            #{index + 1}
+                          <span className="text-xs sm:text-sm font-medium text-zinc-100 flex-shrink-0">
+                            #{teams.length - index}
                           </span>
-                          <span className="text-xs sm:text-sm text-zinc-300 truncate max-w-[100px] sm:max-w-none">
-                            {team.displayName}
-                          </span>
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-xs sm:text-sm text-zinc-300 truncate">
+                              {team.displayName}
+                            </span>
+                            {team.record && (
+                              <span className="text-xs text-zinc-500">
+                                {team.record.wins}-{team.record.losses}{team.record.ties !== undefined && team.record.ties > 0 ? `-${team.record.ties}` : ''}
+                              </span>
+                            )}
+                          </div>
                           {team.madePlayoffs ? (
-                            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-400 border border-emerald-500/60 shadow-md shadow-emerald-400/20">
+                            <span className="inline-block rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-400 border border-emerald-500/60 shadow-md shadow-emerald-400/20 whitespace-nowrap flex-shrink-0">
                               Playoff Team
                             </span>
                           ) : (
-                            <span className="rounded-full bg-zinc-900 px-2 py-0.5 text-xs text-zinc-400 border border-zinc-800">
+                            <span className="inline-block rounded-full bg-zinc-900 px-2 py-0.5 text-xs text-zinc-400 border border-zinc-800 whitespace-nowrap flex-shrink-0">
                               Missed
                             </span>
                           )}
@@ -2194,11 +2330,36 @@ export default function LeaguePage() {
                                     balls: balls,
                                   });
                                 });
+                                
+                                // Initialize percentage inputs after balls are calculated
+                                setTimeout(() => {
+                                  sortedEligible.forEach((t) => {
+                                    const config = getLotteryConfig(t.rosterId);
+                                    if (config && config.calculatedPercent > 0) {
+                                      setPercentInputValues((prev) => {
+                                        const updated = new Map(prev);
+                                        if (!updated.has(t.rosterId)) {
+                                          updated.set(t.rosterId, String(Math.round(config.calculatedPercent)));
+                                        }
+                                        return updated;
+                                      });
+                                    }
+                                  });
+                                }, 100);
                               } else {
                                 updateLotteryConfig(team.rosterId, {
                                   includeInLottery,
                                   balls: includeInLottery ? config.balls : 0,
                                 });
+                                
+                                // Clear percentage input when unchecked
+                                if (!includeInLottery) {
+                                  setPercentInputValues((prev) => {
+                                    const updated = new Map(prev);
+                                    updated.set(team.rosterId, "");
+                                    return updated;
+                                  });
+                                }
                               }
                             }}
                             className="h-4 w-4 rounded border-zinc-700 bg-black text-zinc-100 focus:ring-2 focus:ring-zinc-600"
@@ -2206,113 +2367,106 @@ export default function LeaguePage() {
                         </label>
                       </td>
                       <td className="px-2 sm:px-4 py-2 sm:py-3">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                          className="w-full sm:w-20 rounded-lg border border-zinc-700 bg-black px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-zinc-100 outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600"
-                          value={ballsInputValues.get(team.rosterId) ?? (config.balls === 0 ? "" : String(config.balls))}
-                          onChange={(e) => {
-                            const inputValue = e.target.value;
-                            
-                            // Update local state immediately for instant feedback
-                            setBallsInputValues((prev) => {
-                              const updated = new Map(prev);
-                              updated.set(team.rosterId, inputValue);
-                              return updated;
-                            });
-                            
-                            // Allow empty string while typing
-                            if (inputValue === "") {
-                              debouncedUpdateBalls(team.rosterId, 0);
-                              return;
-                            }
-                            
-                            // Only allow digits
-                            if (!/^\d+$/.test(inputValue)) {
-                              return; // Ignore invalid input
-                            }
-                            
-                            const numValue = parseInt(inputValue, 10);
-                            if (!isNaN(numValue) && numValue >= 0) {
-                              // Validate max value
-                              const MAX_BALLS = 10000;
-                              if (numValue > MAX_BALLS) {
-                                showToast(`Balls value cannot exceed ${MAX_BALLS.toLocaleString()}.`, "error");
-                                return;
-                              }
-                              debouncedUpdateBalls(team.rosterId, numValue);
-                            }
-                          }}
-                          onBlur={(e) => {
-                            // On blur, ensure we have a valid number (default to 0 if empty)
-                            const inputValue = e.target.value.trim();
-                            
-                            // Clear any pending debounce
-                            const existingTimer = ballsDebounceTimer.current.get(team.rosterId);
-                            if (existingTimer) {
-                              clearTimeout(existingTimer);
-                              ballsDebounceTimer.current.delete(team.rosterId);
-                            }
-                            
-                            if (inputValue === "") {
-                              setBallsInputValues((prev) => {
-                                const updated = new Map(prev);
-                                updated.set(team.rosterId, "");
-                                return updated;
-                              });
-                              updateLotteryConfig(team.rosterId, {
-                                balls: 0,
-                              });
-                            } else {
-                              // Validate and update immediately on blur
-                              const numValue = parseInt(inputValue, 10);
-                              if (!isNaN(numValue) && numValue >= 0) {
-                                const MAX_BALLS = 10000;
-                                if (numValue <= MAX_BALLS) {
-                                  updateLotteryConfig(team.rosterId, {
-                                    balls: numValue,
-                                  });
-                                } else {
-                                  // Reset to max if exceeded
-                                  setBallsInputValues((prev) => {
-                                    const updated = new Map(prev);
-                                    updated.set(team.rosterId, String(MAX_BALLS));
-                                    return updated;
-                                  });
-                                  updateLotteryConfig(team.rosterId, {
-                                    balls: MAX_BALLS,
-                                  });
-                                  showToast(`Balls value cannot exceed ${MAX_BALLS.toLocaleString()}.`, "error");
-                                }
-                              } else {
-                                // Invalid input, reset to current config value
-                                setBallsInputValues((prev) => {
+                        <div className="flex gap-2">
+                          <div className="flex-1">
+                            <div className="text-xs text-zinc-400 mb-1">Odds (%)</div>
+                            <div className="relative">
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                className={`w-full rounded-lg border border-zinc-700 bg-black px-2 sm:px-3 py-1.5 sm:py-2 pr-6 text-xs sm:text-sm outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 ${
+                                  !config.includeInLottery 
+                                    ? "text-zinc-500 opacity-50 cursor-not-allowed" 
+                                    : "text-zinc-100"
+                                }`}
+                                value={!config.includeInLottery ? "0" : (percentInputValues.get(team.rosterId) ?? (config.calculatedPercent === 0 ? "" : String(Math.round(config.calculatedPercent))))}
+                                placeholder="0"
+                              disabled={!config.includeInLottery}
+                              onChange={(e) => {
+                                let inputValue = e.target.value;
+                                
+                                // Strip "%" symbol if user types it
+                                inputValue = inputValue.replace(/%/g, '');
+                                
+                                // Update local state immediately
+                                setPercentInputValues((prev) => {
                                   const updated = new Map(prev);
-                                  updated.set(team.rosterId, config.balls === 0 ? "" : String(config.balls));
+                                  updated.set(team.rosterId, inputValue);
                                   return updated;
                                 });
-                              }
-                            }
-                          }}
-                          onFocus={(e) => {
-                            // Initialize local state on focus if not already set
-                            if (!ballsInputValues.has(team.rosterId)) {
-                              setBallsInputValues((prev) => {
-                                const updated = new Map(prev);
-                                updated.set(team.rosterId, config.balls === 0 ? "" : String(config.balls));
-                                return updated;
-                              });
-                            }
-                          }}
-                          disabled={!config.includeInLottery}
-                          placeholder="0"
-                          title="The number of lottery balls (combinations) assigned to this team. More balls = better odds. Like the NBA lottery system, where worse teams get more balls."
-                        />
+                                
+                                // Allow empty string or just a decimal point while typing
+                                if (inputValue === "" || inputValue === ".") {
+                                  return;
+                                }
+                                
+                                // Validate decimal input
+                                if (!/^\d*\.?\d*$/.test(inputValue)) {
+                                  return; // Ignore invalid input
+                                }
+                                
+                                const numValue = parseFloat(inputValue);
+                                if (!isNaN(numValue) && numValue >= 0) {
+                                  debouncedUpdateFromPercentage(team.rosterId, numValue);
+                                }
+                              }}
+                              onBlur={(e) => {
+                                const inputValue = e.target.value.trim();
+                                
+                                // Clear any pending debounce
+                                const existingTimer = percentDebounceTimer.current.get(team.rosterId);
+                                if (existingTimer) {
+                                  clearTimeout(existingTimer);
+                                  percentDebounceTimer.current.delete(team.rosterId);
+                                }
+                                
+                                if (inputValue === "" || inputValue === ".") {
+                                  // Reset to current calculated percent
+                                  setPercentInputValues((prev) => {
+                                    const updated = new Map(prev);
+                                    updated.set(team.rosterId, config.calculatedPercent === 0 ? "" : String(Math.round(config.calculatedPercent)));
+                                    return updated;
+                                  });
+                                } else {
+                                  const numValue = parseFloat(inputValue);
+                                  if (!isNaN(numValue) && numValue >= 0) {
+                                    updateFromPercentage(team.rosterId, numValue);
+                                  } else {
+                                    // Invalid input, reset to current config value
+                                    setPercentInputValues((prev) => {
+                                      const updated = new Map(prev);
+                                      updated.set(team.rosterId, config.calculatedPercent === 0 ? "" : String(Math.round(config.calculatedPercent)));
+                                      return updated;
+                                    });
+                                  }
+                                }
+                              }}
+                              onFocus={(e) => {
+                                // Initialize local state on focus if not already set
+                                if (!percentInputValues.has(team.rosterId)) {
+                                  setPercentInputValues((prev) => {
+                                    const updated = new Map(prev);
+                                    updated.set(team.rosterId, config.calculatedPercent === 0 ? "" : String(Math.round(config.calculatedPercent)));
+                                    return updated;
+                                  });
+                                }
+                              }}
+                              disabled={!config.includeInLottery}
+                              placeholder="0"
+                              title="Percentage chance for this team to get the #1 pick. Adjusting this will proportionally adjust other teams."
+                            />
+                              {config.includeInLottery && (
+                                <span className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 text-xs sm:text-sm text-zinc-400 pointer-events-none">
+                                  %
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       </td>
                       <td className="px-2 sm:px-4 py-2 sm:py-3">
                         <span className="text-xs sm:text-sm text-zinc-300">
-                          {config.calculatedPercent ?? 0}%
+                          {config.includeInLottery && !config.isLockedPick ? (config.balls ?? 0) : 0}
                         </span>
                       </td>
                       <td className="px-2 sm:px-4 py-2 sm:py-3">
@@ -2320,15 +2474,27 @@ export default function LeaguePage() {
                           <input
                             type="checkbox"
                             checked={config.isLockedPick}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              const isLocked = e.target.checked;
                               updateLotteryConfig(team.rosterId, {
-                                isLockedPick: e.target.checked,
+                                isLockedPick: isLocked,
+                                // Remove from lottery when pick is locked
+                                includeInLottery: isLocked ? false : config.includeInLottery,
                                 // Clear manual slot if unchecking locked pick
-                                manualSlot: e.target.checked
+                                manualSlot: isLocked
                                   ? config.manualSlot
                                   : undefined,
-                              })
-                            }
+                              });
+                              
+                              // Clear percentage input when locked
+                              if (isLocked) {
+                                setPercentInputValues((prev) => {
+                                  const updated = new Map(prev);
+                                  updated.set(team.rosterId, "0");
+                                  return updated;
+                                });
+                              }
+                            }}
                             className="h-4 w-4 rounded border-zinc-700 bg-black text-zinc-100 focus:ring-2 focus:ring-zinc-600"
                           />
                         </label>
@@ -2381,6 +2547,34 @@ export default function LeaguePage() {
 
           {/* Mobile Card View */}
           <div className="sm:hidden mt-6 space-y-3">
+            {/* Total Percentage Display - Mobile */}
+            {(() => {
+              let totalPercent = 0;
+              teams.forEach((team) => {
+                const config = getLotteryConfig(team.rosterId);
+                if (config.includeInLottery && !config.isLockedPick) {
+                  const percentValue = percentInputValues.get(team.rosterId);
+                  if (percentValue && percentValue !== "") {
+                    const percent = parseFloat(percentValue);
+                    if (!isNaN(percent) && percent > 0) {
+                      totalPercent += percent;
+                    }
+                  }
+                }
+              });
+              return (
+                <div className={`mb-3 text-sm ${totalPercent > 100.1 ? 'text-red-400' : totalPercent < 99.9 ? 'text-yellow-400' : 'text-green-400'}`}>
+                  <span className="font-semibold">Total Percentage: </span>
+                  <span>{totalPercent.toFixed(1)}%</span>
+                  {totalPercent > 100.1 && (
+                    <span className="ml-2 text-xs">⚠️ Exceeds 100%</span>
+                  )}
+                  {totalPercent < 99.9 && totalPercent > 0 && (
+                    <span className="ml-2 text-xs">⚠️ Less than 100%</span>
+                  )}
+                </div>
+              );
+            })()}
             {teams.map((team, index) => {
               const config = getLotteryConfig(team.rosterId);
               return (
@@ -2408,13 +2602,18 @@ export default function LeaguePage() {
                       </div>
                     )}
                     <div className="flex-1">
-                      <div className="font-medium text-zinc-100">#{index + 1} {team.displayName}</div>
+                      <div className="font-medium text-zinc-100">#{teams.length - index} {team.displayName}</div>
+                      {team.record && (
+                        <div className="text-xs text-zinc-500 mt-0.5">
+                          {team.record.wins}-{team.record.losses}{team.record.ties !== undefined && team.record.ties > 0 ? `-${team.record.ties}` : ''}
+                        </div>
+                      )}
                       {team.madePlayoffs ? (
-                        <span className="inline-block mt-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-400 border border-emerald-500/60 shadow-md shadow-emerald-400/20">
+                        <span className="inline-block mt-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-400 border border-emerald-500/60 shadow-md shadow-emerald-400/20 whitespace-nowrap flex-shrink-0">
                           Playoff Team
                         </span>
                       ) : (
-                        <span className="text-xs text-zinc-400">Missed Playoffs</span>
+                        <span className="text-xs text-zinc-400 mt-1">Missed Playoffs</span>
                       )}
                     </div>
                   </div>
@@ -2515,6 +2714,15 @@ export default function LeaguePage() {
                               });
                             } else {
                               updateLotteryConfig(team.rosterId, { includeInLottery, balls: includeInLottery ? config.balls : 0 });
+                              
+                              // Clear percentage input when unchecked
+                              if (!includeInLottery) {
+                                setPercentInputValues((prev) => {
+                                  const updated = new Map(prev);
+                                  updated.set(team.rosterId, "");
+                                  return updated;
+                                });
+                              }
                             }
                           }}
                           className="h-4 w-4 rounded border-zinc-700 bg-black text-zinc-100 focus:ring-2 focus:ring-zinc-600"
@@ -2524,90 +2732,89 @@ export default function LeaguePage() {
                     </div>
                     
                     <div>
-                      <div className="text-xs text-zinc-400 mb-1">Balls</div>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        className="w-full rounded-lg border border-zinc-800 bg-black px-2 py-1.5 text-sm text-zinc-100 outline-none focus:border-zinc-600"
-                        value={ballsInputValues.get(team.rosterId) ?? (config.balls === 0 ? "" : String(config.balls))}
-                        onChange={(e) => {
-                          const inputValue = e.target.value;
-                          setBallsInputValues((prev) => {
+                      <div className="text-xs text-zinc-400 mb-1">Odds (%)</div>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          className={`w-full rounded-lg border border-zinc-800 bg-black px-2 py-1.5 pr-6 text-sm outline-none focus:border-zinc-600 ${
+                            !config.includeInLottery 
+                              ? "text-zinc-500 opacity-50 cursor-not-allowed" 
+                              : "text-zinc-100"
+                          }`}
+                          value={!config.includeInLottery ? "0" : (percentInputValues.get(team.rosterId) ?? (config.calculatedPercent === 0 ? "" : String(Math.round(config.calculatedPercent))))}
+                          onChange={(e) => {
+                          let inputValue = e.target.value;
+                          
+                          // Strip "%" symbol if user types it
+                          inputValue = inputValue.replace(/%/g, '');
+                          
+                          setPercentInputValues((prev) => {
                             const updated = new Map(prev);
                             updated.set(team.rosterId, inputValue);
                             return updated;
                           });
-                          if (inputValue === "") {
-                            debouncedUpdateBalls(team.rosterId, 0);
+                          
+                          if (inputValue === "" || inputValue === ".") {
                             return;
                           }
-                          if (!/^\d+$/.test(inputValue)) return;
-                          const numValue = parseInt(inputValue, 10);
+                          
+                          if (!/^\d*\.?\d*$/.test(inputValue)) {
+                            return;
+                          }
+                          
+                          const numValue = parseFloat(inputValue);
                           if (!isNaN(numValue) && numValue >= 0) {
-                            const MAX_BALLS = 10000;
-                            if (numValue > MAX_BALLS) {
-                              showToast(`Balls value cannot exceed ${MAX_BALLS.toLocaleString()}.`, "error");
-                              return;
-                            }
-                            debouncedUpdateBalls(team.rosterId, numValue);
+                            debouncedUpdateFromPercentage(team.rosterId, numValue);
                           }
                         }}
                         onBlur={(e) => {
                           const inputValue = e.target.value.trim();
-                          const existingTimer = ballsDebounceTimer.current.get(team.rosterId);
+                          
+                          const existingTimer = percentDebounceTimer.current.get(team.rosterId);
                           if (existingTimer) {
                             clearTimeout(existingTimer);
-                            ballsDebounceTimer.current.delete(team.rosterId);
+                            percentDebounceTimer.current.delete(team.rosterId);
                           }
-                          if (inputValue === "") {
-                            setBallsInputValues((prev) => {
+                          
+                          if (inputValue === "" || inputValue === ".") {
+                            setPercentInputValues((prev) => {
                               const updated = new Map(prev);
-                              updated.set(team.rosterId, "");
+                              updated.set(team.rosterId, config.calculatedPercent === 0 ? "" : String(config.calculatedPercent));
                               return updated;
                             });
-                            updateLotteryConfig(team.rosterId, { balls: 0 });
                           } else {
-                            const numValue = parseInt(inputValue, 10);
+                            const numValue = parseFloat(inputValue);
                             if (!isNaN(numValue) && numValue >= 0) {
-                              const MAX_BALLS = 10000;
-                              if (numValue <= MAX_BALLS) {
-                                updateLotteryConfig(team.rosterId, { balls: numValue });
-                              } else {
-                                setBallsInputValues((prev) => {
-                                  const updated = new Map(prev);
-                                  updated.set(team.rosterId, String(MAX_BALLS));
-                                  return updated;
-                                });
-                                updateLotteryConfig(team.rosterId, { balls: MAX_BALLS });
-                                showToast(`Balls value cannot exceed ${MAX_BALLS.toLocaleString()}.`, "error");
-                              }
+                              updateFromPercentage(team.rosterId, numValue);
                             } else {
-                              setBallsInputValues((prev) => {
+                              setPercentInputValues((prev) => {
                                 const updated = new Map(prev);
-                                updated.set(team.rosterId, config.balls === 0 ? "" : String(config.balls));
+                                updated.set(team.rosterId, config.calculatedPercent === 0 ? "" : String(config.calculatedPercent));
                                 return updated;
                               });
                             }
                           }
                         }}
                         onFocus={(e) => {
-                          if (!ballsInputValues.has(team.rosterId)) {
-                            setBallsInputValues((prev) => {
+                          if (!percentInputValues.has(team.rosterId)) {
+                            setPercentInputValues((prev) => {
                               const updated = new Map(prev);
-                              updated.set(team.rosterId, config.balls === 0 ? "" : String(config.balls));
+                              updated.set(team.rosterId, config.calculatedPercent === 0 ? "" : String(config.calculatedPercent));
                               return updated;
                             });
                           }
                         }}
                         disabled={!config.includeInLottery}
                         placeholder="0"
+                        title="Percentage chance for this team to get the #1 pick. Adjusting this will proportionally adjust other teams."
                       />
-                    </div>
-                    
-                    <div>
-                      <div className="text-xs text-zinc-400 mb-1">Odds %</div>
-                      <div className="text-sm text-zinc-300">{config.calculatedPercent ?? 0}%</div>
+                        {config.includeInLottery && (
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-zinc-400 pointer-events-none">
+                            %
+                          </span>
+                        )}
+                      </div>
                     </div>
                     
                     <div>
@@ -2615,12 +2822,24 @@ export default function LeaguePage() {
                         <input
                           type="checkbox"
                           checked={config.isLockedPick}
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            const isLocked = e.target.checked;
                             updateLotteryConfig(team.rosterId, {
-                              isLockedPick: e.target.checked,
-                              manualSlot: e.target.checked ? config.manualSlot : undefined,
-                            })
-                          }
+                              isLockedPick: isLocked,
+                              // Remove from lottery when pick is locked
+                              includeInLottery: isLocked ? false : config.includeInLottery,
+                              manualSlot: isLocked ? config.manualSlot : undefined,
+                            });
+                            
+                            // Clear percentage input when locked
+                            if (isLocked) {
+                              setPercentInputValues((prev) => {
+                                const updated = new Map(prev);
+                                updated.set(team.rosterId, "0");
+                                return updated;
+                              });
+                            }
+                          }}
                           className="h-4 w-4 rounded border-zinc-700 bg-black text-zinc-100 focus:ring-2 focus:ring-zinc-600"
                         />
                         <span className="text-zinc-300">Lock a Pick</span>
