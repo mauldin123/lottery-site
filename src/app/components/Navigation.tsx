@@ -7,7 +7,7 @@ export default function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <nav className="sticky md:static top-0 z-50 w-full p-3 sm:p-4 border-b border-zinc-800 bg-zinc-950/40">
+    <nav className="sticky md:static top-0 z-50 w-full p-3 sm:p-4 border-b border-zinc-800 bg-zinc-950">
       <div className="flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2 text-xl font-bold text-emerald-400 hover:text-emerald-300 transition-colors">
           <img
