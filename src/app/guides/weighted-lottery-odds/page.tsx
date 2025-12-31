@@ -89,7 +89,7 @@ export default function WeightedLotteryOddsPage() {
                   The worst team gets the most balls, with decreasing amounts for better teams. This is the default system used by our generator.
                 </p>
                 <p className="text-zinc-400 text-xs">
-                  Example: 14-0-0 record = 14 balls, 13-1-0 = 13 balls, etc.
+                  Example: 0-14 record = 14 balls, 2-12 record = 12 balls, etc.
                 </p>
               </div>
               <div className="rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
