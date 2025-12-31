@@ -8,6 +8,8 @@ export interface ShareDocument {
   season: string;
   results: any[];
   teams: any[];
+  fallProtectionEnabled?: boolean;
+  fallProtectionSpots?: number;
   expiresAt: Date;
 }
 
@@ -21,6 +23,8 @@ export interface HistoryDocument {
   teams: any[];
   lotteryConfigs?: Array<[number, any]>;
   shareId?: string;
+  fallProtectionEnabled?: boolean;
+  fallProtectionSpots?: number;
 }
 
 export interface CounterDocument {

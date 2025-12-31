@@ -42,6 +42,9 @@ type LotteryFinalizeData = {
   lotteryConfigs: Array<[number, LotteryTeamConfig]>;
   timestamp: string;
   username?: string;
+  fallProtectionEnabled?: boolean;
+  fallProtectionSpots?: number;
+  teamRanks?: Array<[number, number]>; // Array of [rosterId, rank] tuples
 };
 
 // Helper functions
@@ -83,8 +86,20 @@ function calculatePreLotteryProbability(
   targetPick: number,
   eligibleTeams: Array<{ rosterId: number; balls: number }>,
   lockedPicks: Map<number, number>,
-  totalPicks: number
+  totalPicks: number,
+  teamRanks?: Map<number, number>,
+  fallProtectionSpots?: number
 ): number {
+  // If fall protection is enabled and this pick violates it, return 0
+  if (teamRanks && fallProtectionSpots) {
+    const teamRank = teamRanks.get(targetRosterId);
+    if (teamRank !== undefined) {
+      const maxAllowedPick = teamRank + fallProtectionSpots;
+      if (targetPick > maxAllowedPick) {
+        return 0; // Can't get this pick due to fall protection
+      }
+    }
+  }
   const lockedPickForTeam = Array.from(lockedPicks.entries()).find(([_, rid]) => rid === targetRosterId)?.[0];
   if (lockedPickForTeam !== undefined && lockedPickForTeam !== targetPick) {
     return 0;
@@ -101,6 +116,25 @@ function calculatePreLotteryProbability(
   const teamBalls = eligibleTeams.find((t) => t.rosterId === targetRosterId)?.balls ?? 0;
   if (teamBalls === 0) return 0;
 
+  // Helper function to get teams eligible for a specific pick (respecting fall protection)
+  const getEligibleTeamsForPick = (pick: number): Array<{ rosterId: number; balls: number }> => {
+    let teamsForPick = eligibleTeams.filter((t) => 
+      !Array.from(lockedPicks.values()).includes(t.rosterId)
+    );
+    
+    // Apply fall protection filter
+    if (teamRanks && fallProtectionSpots) {
+      teamsForPick = teamsForPick.filter((t) => {
+        const rank = teamRanks.get(t.rosterId);
+        if (rank === undefined) return true; // No rank means no constraint
+        const maxAllowedPick = rank + fallProtectionSpots;
+        return pick <= maxAllowedPick;
+      });
+    }
+    
+    return teamsForPick;
+  };
+
   let probability = 1.0;
   let remainingBalls = eligibleTeams.reduce((sum, t) => sum + t.balls, 0);
   const processedLockedPicks = new Set<number>();
@@ -116,22 +150,38 @@ function calculatePreLotteryProbability(
       continue;
     }
 
-    if (remainingBalls === 0 || teamBalls === 0) {
+    // Get teams eligible for this pick (respecting fall protection)
+    const eligibleForThisPick = getEligibleTeamsForPick(pick);
+    const ballsForThisPick = eligibleForThisPick.reduce((sum, t) => sum + t.balls, 0);
+    
+    if (ballsForThisPick === 0 || teamBalls === 0) {
       return 0;
     }
 
-    const probNotGetThisPick = 1 - (teamBalls / remainingBalls);
+    // Check if target team is eligible for this pick
+    const targetTeamEligible = eligibleForThisPick.some(t => t.rosterId === targetRosterId);
+    
+    if (!targetTeamEligible) {
+      // Target team can't get this pick (fall protection), so probability of not getting it is 1.0
+      // But we still need to account for the reduction in pool
+      if (ballsForThisPick > 0) {
+        const avgBallsPerTeam = ballsForThisPick / eligibleForThisPick.length;
+        remainingBalls = Math.max(0, remainingBalls - avgBallsPerTeam);
+      }
+      continue;
+    }
+
+    // Probability of NOT getting this pick (someone else gets it)
+    const probNotGetThisPick = 1 - (teamBalls / ballsForThisPick);
     probability *= probNotGetThisPick;
 
-    const otherTeamsBalls = remainingBalls - teamBalls;
+    // After this pick, one of the OTHER teams gets it (not target team)
+    const otherTeamsBalls = ballsForThisPick - teamBalls;
     if (otherTeamsBalls > 0) {
-      const otherTeams = eligibleTeams.filter((t) => 
-        t.rosterId !== targetRosterId && 
-        !Array.from(lockedPicks.values()).includes(t.rosterId)
-      );
+      const otherTeams = eligibleForThisPick.filter((t) => t.rosterId !== targetRosterId);
       if (otherTeams.length > 0) {
         const avgOtherBalls = otherTeamsBalls / otherTeams.length;
-        remainingBalls = teamBalls + (otherTeamsBalls - avgOtherBalls);
+        remainingBalls = Math.max(0, remainingBalls - avgOtherBalls);
       } else {
         return 0;
       }
@@ -140,11 +190,19 @@ function calculatePreLotteryProbability(
     }
   }
 
-  if (remainingBalls === 0 || teamBalls === 0) {
+  // Now calculate probability of getting the target pick
+  // Get teams eligible for the target pick (respecting fall protection)
+  const eligibleForTargetPick = getEligibleTeamsForPick(targetPick);
+  const ballsForTargetPick = eligibleForTargetPick.reduce((sum, t) => sum + t.balls, 0);
+  
+  // Check if target team is eligible for target pick
+  const targetTeamEligibleForTarget = eligibleForTargetPick.some(t => t.rosterId === targetRosterId);
+  
+  if (!targetTeamEligibleForTarget || ballsForTargetPick === 0 || teamBalls === 0) {
     return 0;
   }
 
-  const probGetTargetPick = teamBalls / remainingBalls;
+  const probGetTargetPick = teamBalls / ballsForTargetPick;
   probability *= probGetTargetPick;
 
   return Math.max(0, Math.min(100, probability * 100));
@@ -297,6 +355,8 @@ export default function LotteryPage() {
         results: results,
         teams: lotteryData.teams,
         lotteryConfigs: lotteryData.lotteryConfigs,
+        fallProtectionEnabled: lotteryData.fallProtectionEnabled,
+        fallProtectionSpots: lotteryData.fallProtectionSpots,
       };
 
       console.log("Saving history for username (normalized):", normalizedUsername);
@@ -341,8 +401,13 @@ export default function LotteryPage() {
     // Use setTimeout to allow UI to update
     setTimeout(() => {
       try {
-        const { teams, lotteryConfigs: configEntries } = lotteryData;
+        const { teams, lotteryConfigs: configEntries, fallProtectionEnabled, fallProtectionSpots, teamRanks: teamRanksArray } = lotteryData;
         const lotteryConfigs = new Map<number, LotteryTeamConfig>(configEntries);
+        
+        // Build team ranks map if fall protection is enabled
+        const teamRanks = fallProtectionEnabled && teamRanksArray 
+          ? new Map<number, number>(teamRanksArray)
+          : undefined;
 
         // Build map of locked picks
         const lockedPicks = new Map<number, number>();
@@ -365,17 +430,40 @@ export default function LotteryPage() {
 
         teams.forEach((team) => {
           const config = lotteryConfigs.get(team.rosterId);
+          if (!config) return;
+          
+          // CRITICAL: If a team has balls > 0, they MUST be in the lottery
+          // Even if includeInLottery is false (configuration error), include them
+          const shouldBeInLottery = (config.includeInLottery || (config.balls > 0 && !config.isLockedPick));
+          
           // Include team if they're in lottery and not locked
           // If they have 0 balls but should be in lottery, give them minimum 1 ball
-          if (config?.includeInLottery && !config.isLockedPick) {
+          if (shouldBeInLottery && !config.isLockedPick) {
             const balls = config.balls > 0 ? config.balls : 1;
             eligibleTeams.push({
               rosterId: team.rosterId,
               balls: balls,
               teamName: team.displayName,
             });
+            
+            // Warn if configuration was incorrect
+            if (!config.includeInLottery && config.balls > 0) {
+              console.warn(`⚠️ Team #${team.rosterId} has ${config.balls} balls but includeInLottery=false. Auto-correcting to include in lottery.`);
+            }
+          }
+          
+          // Debug logging for teams 11 and 12
+          if (team.rosterId === 11 || team.rosterId === 12) {
+            console.log(`Team #${team.rosterId}: includeInLottery=${config.includeInLottery}, isLockedPick=${config.isLockedPick}, balls=${config.balls}`);
+            if (shouldBeInLottery && !config.isLockedPick) {
+              console.log(`  ✓ Team #${team.rosterId} added to eligibleTeams`);
+            } else {
+              console.log(`  ✗ Team #${team.rosterId} NOT added to eligibleTeams`);
+            }
           }
         });
+        
+        console.log(`Eligible teams: ${eligibleTeams.map(t => `#${t.rosterId}`).join(', ')}`);
 
         if (eligibleTeams.length === 0 && lockedPicks.size === 0) {
           setError("No eligible teams for lottery.");
@@ -405,32 +493,319 @@ export default function LotteryPage() {
           }
         });
 
-        // Draw remaining picks
+        // Assign non-lottery teams to their deserved picks BEFORE drawing
+        const nonLotteryTeamAssignments = new Map<number, number>(); // rosterId -> pick
+        const nonLotteryTeams = teams.filter((t) => {
+          const config = lotteryConfigs.get(t.rosterId);
+          const isNonLottery = config && !config.includeInLottery && !config.isLockedPick;
+          
+          // CRITICAL: If a team has balls > 0, they MUST be in the lottery, not non-lottery
+          if (isNonLottery && config.balls > 0) {
+            console.error(`❌ CRITICAL: Team #${t.rosterId} has ${config.balls} balls but is marked as non-lottery!`);
+            console.error(`   This team should be in the lottery. Fixing by excluding from non-lottery assignment.`);
+            return false; // Exclude from non-lottery teams
+          }
+          
+          // Debug logging for teams 11 and 12
+          if (t.rosterId === 11 || t.rosterId === 12) {
+            console.log(`Team #${t.rosterId} classification:`);
+            console.log(`  includeInLottery: ${config?.includeInLottery}`);
+            console.log(`  isLockedPick: ${config?.isLockedPick}`);
+            console.log(`  balls: ${config?.balls}`);
+            console.log(`  Is non-lottery: ${isNonLottery}`);
+            if (isNonLottery && config?.balls > 0) {
+              console.error(`  ❌ ERROR: Team #${t.rosterId} has balls but is being treated as NON-LOTTERY!`);
+            }
+          }
+          
+          return isNonLottery;
+        });
+        
+        if (nonLotteryTeams.length > 0) {
+          // Sort non-lottery teams by record (worst first) to assign to worst remaining picks
+          const sortedNonLottery = [...nonLotteryTeams].sort((a, b) => {
+            const aW = a.record?.wins ?? 0;
+            const aL = a.record?.losses ?? 0;
+            const aT = a.record?.ties ?? 0;
+            const bW = b.record?.wins ?? 0;
+            const bL = b.record?.losses ?? 0;
+            const bT = b.record?.ties ?? 0;
+            
+            const aPct = winPct(aW, aL, aT);
+            const bPct = winPct(bW, bL, bT);
+            
+            if (aPct !== bPct) return aPct - bPct;
+            if (aW !== bW) return aW - bW;
+            if (bL !== aL) return bL - aL;
+            if (bT !== aT) return bT - aT;
+            return (b.rosterId ?? 0) - (a.rosterId ?? 0);
+          });
+          
+          // Non-lottery teams get picks starting after lottery teams
+          // But we need to account for locked picks when calculating which picks are available
+          let nextAvailablePick = eligibleTeams.length + 1;
+          sortedNonLottery.forEach((team) => {
+            // Find the next available pick that isn't locked and isn't already assigned
+            while (nextAvailablePick <= totalPicks && (lockedPicks.has(nextAvailablePick) || results.some(r => r.pick === nextAvailablePick) || Array.from(nonLotteryTeamAssignments.values()).includes(nextAvailablePick))) {
+              nextAvailablePick++;
+            }
+            if (nextAvailablePick <= totalPicks) {
+              nonLotteryTeamAssignments.set(team.rosterId, nextAvailablePick);
+              nextAvailablePick++;
+            }
+          });
+        }
+        
+        // Assign non-lottery teams to their fixed picks
+        // CRITICAL: Only assign teams that are NOT in eligibleTeams (not in lottery)
+        console.log(`Assigning ${nonLotteryTeamAssignments.size} non-lottery teams to picks...`);
+        nonLotteryTeamAssignments.forEach((pick, rosterId) => {
+          // Safety check: if this team is in eligibleTeams, they should NOT be assigned as non-lottery
+          const isInEligibleTeams = eligibleTeams.some(t => t.rosterId === rosterId);
+          if (isInEligibleTeams) {
+            console.error(`❌ CRITICAL ERROR: Team #${rosterId} is in eligibleTeams but was marked as non-lottery!`);
+            console.error(`   This team should be in the lottery, not assigned as non-lottery to pick ${pick}`);
+            // Remove from non-lottery assignments - they should be in the lottery
+            nonLotteryTeamAssignments.delete(rosterId);
+            return;
+          }
+          
+          const team = teamMap.get(rosterId);
+          if (team && !assignedRosterIds.has(rosterId) && !results.some(r => r.pick === pick)) {
+            console.log(`📌 Assigning non-lottery team #${rosterId} (${team.displayName}) to pick ${pick}`);
+            results.push({
+              pick,
+              rosterId,
+              teamName: team.displayName,
+              odds: 0,
+              wasLocked: false,
+            });
+            assignedRosterIds.add(rosterId);
+          }
+        });
+        
+        console.log(`After non-lottery assignment: ${results.length} picks assigned`);
+        console.log(`Assigned picks: ${results.map(r => r.pick).sort((a, b) => a - b).join(', ')}`);
+
+        // Draw remaining picks sequentially (original logic)
         let currentPick = 1;
-        while (results.length < totalPicks) {
+        let consecutiveFailures = 0;
+        const maxFailures = totalPicks * 2; // Safety limit to prevent infinite loops
+        
+        console.log(`Starting lottery draw. Eligible teams: ${eligibleTeams.length}, Non-lottery teams: ${nonLotteryTeams.length}`);
+        const nonLotteryPicksArray = Array.from(nonLotteryTeamAssignments.values()).sort((a, b) => a - b);
+        const lockedPicksArray = Array.from(lockedPicks.keys()).sort((a, b) => a - b);
+        console.log(`Non-lottery picks assigned: ${nonLotteryPicksArray.join(', ')}`);
+        console.log(`Locked picks: ${lockedPicksArray.join(', ')}`);
+        
+        while (results.length < totalPicks && currentPick <= totalPicks) {
+          // Safety check: if we've tried too many times without progress, break
+          if (consecutiveFailures >= maxFailures) {
+            console.error("Lottery draw stuck, breaking out of loop");
+            console.error(`Results length: ${results.length}, Total picks: ${totalPicks}`);
+            console.error(`Current pick: ${currentPick}, Consecutive failures: ${consecutiveFailures}`);
+            console.error(`Assigned teams: ${Array.from(assignedRosterIds).join(', ')}`);
+            console.error(`Remaining eligible teams: ${eligibleTeams.filter(t => !assignedRosterIds.has(t.rosterId)).map(t => t.rosterId).join(', ')}`);
+            setError(`Lottery draw stuck at pick ${currentPick}. Assigned ${results.length}/${totalPicks} picks. Please check your configuration.`);
+            setIsRunningLottery(false);
+            return;
+          }
+          
           if (lockedPicks.has(currentPick)) {
             currentPick++;
+            consecutiveFailures = 0; // Reset on locked pick (expected)
             continue;
           }
 
-          const availableTeams = eligibleTeams.filter(
+          // Skip picks already assigned to non-lottery teams
+          const isNonLotteryPick = Array.from(nonLotteryTeamAssignments.values()).includes(currentPick);
+          if (isNonLotteryPick) {
+            currentPick++;
+            consecutiveFailures = 0; // Reset on non-lottery pick (expected)
+            continue;
+          }
+          
+          // Check if this pick is already assigned
+          if (results.some(r => r.pick === currentPick)) {
+            currentPick++;
+            consecutiveFailures = 0;
+            continue;
+          }
+
+          // Filter available teams: must not be assigned AND must be eligible for this pick
+          let availableTeams = eligibleTeams.filter(
             (t) => !assignedRosterIds.has(t.rosterId)
           );
 
+          // If fall protection is enabled, further filter by whether this pick is valid for each team
+          if (fallProtectionEnabled && fallProtectionSpots && teamRanks) {
+            availableTeams = availableTeams.filter((t) => {
+              const rank = teamRanks.get(t.rosterId);
+              if (rank === undefined) return true; // No rank means no constraint
+              const maxAllowedPick = rank + fallProtectionSpots;
+              return currentPick <= maxAllowedPick;
+            });
+          }
+
           if (availableTeams.length === 0) {
-            const remainingTeams = teams.filter((t) => !assignedRosterIds.has(t.rosterId));
-            if (remainingTeams.length > 0) {
-              const sortedRemaining = [...remainingTeams].sort((a, b) => {
+            // No eligible teams can take this pick - assign all remaining unassigned lottery teams to their BEST (lowest number) valid pick
+            // If no valid unassigned pick exists, try to swap with a team that has a valid pick
+            const unassignedLotteryTeams = eligibleTeams.filter(t => !assignedRosterIds.has(t.rosterId));
+            
+            if (unassignedLotteryTeams.length > 0) {
+              console.warn(`No team can take pick ${currentPick}. Assigning ${unassignedLotteryTeams.length} remaining lottery teams to their best valid picks.`);
+              
+              // Assign each remaining team to their BEST (lowest number) available valid pick
+              unassignedLotteryTeams.forEach((team) => {
+                let bestValidPick = 0;
+                
+                if (fallProtectionEnabled && fallProtectionSpots && teamRanks) {
+                  const rank = teamRanks.get(team.rosterId);
+                  if (rank !== undefined) {
+                    const maxAllowedPick = rank + fallProtectionSpots;
+                    // First, try to find an unassigned pick
+                    for (let pick = 1; pick <= Math.min(maxAllowedPick, totalPicks); pick++) {
+                      if (pick > maxAllowedPick) continue;
+                      if (lockedPicks.has(pick)) continue;
+                      if (results.some(r => r.pick === pick)) continue;
+                      if (Array.from(nonLotteryTeamAssignments.values()).includes(pick)) continue;
+                      
+                      bestValidPick = pick;
+                      break; // Found the best (lowest) valid pick
+                    }
+                    
+                    // If no unassigned pick found, try to swap with a team that has a valid pick (including chain swaps)
+                    if (bestValidPick === 0) {
+                      for (let targetPick = 1; targetPick <= Math.min(maxAllowedPick, totalPicks); targetPick++) {
+                        if (targetPick > maxAllowedPick) continue;
+                        if (lockedPicks.has(targetPick)) continue;
+                        if (Array.from(nonLotteryTeamAssignments.values()).includes(targetPick)) continue;
+                        
+                        // Find the team currently assigned to this pick
+                        const currentAssignment = results.find(r => r.pick === targetPick);
+                        if (currentAssignment) {
+                          const currentTeamRank = teamRanks.get(currentAssignment.rosterId);
+                          if (currentTeamRank !== undefined) {
+                            const currentTeamMaxPick = currentTeamRank + fallProtectionSpots;
+                            // Try to find ANY worse pick the current team can take (even if it's taken, we can chain)
+                            for (let worsePick = targetPick + 1; worsePick <= Math.min(currentTeamMaxPick, totalPicks); worsePick++) {
+                              if (worsePick > currentTeamMaxPick) break;
+                              if (lockedPicks.has(worsePick)) continue;
+                              if (Array.from(nonLotteryTeamAssignments.values()).includes(worsePick)) continue;
+                              
+                              // If the worse pick is unassigned, simple swap
+                              if (!results.some(r => r.pick === worsePick)) {
+                                console.log(`  🔄 Swapping: Team #${currentAssignment.rosterId} (rank ${currentTeamRank}) moves from pick ${targetPick} to pick ${worsePick}`);
+                                currentAssignment.pick = worsePick;
+                                bestValidPick = targetPick;
+                                break;
+                              } else {
+                                // Try to recursively free up the worse pick (chain swap)
+                                const worsePickAssignment = results.find(r => r.pick === worsePick);
+                                if (worsePickAssignment) {
+                                  const worseTeamRank = teamRanks.get(worsePickAssignment.rosterId);
+                                  if (worseTeamRank !== undefined) {
+                                    const worseTeamMaxPick = worseTeamRank + fallProtectionSpots;
+                                    // Find an even worse pick that the worse team can take
+                                    for (let chainPick = worsePick + 1; chainPick <= Math.min(worseTeamMaxPick, totalPicks); chainPick++) {
+                                      if (chainPick > worseTeamMaxPick) break;
+                                      if (lockedPicks.has(chainPick)) continue;
+                                      if (results.some(r => r.pick === chainPick)) continue;
+                                      if (Array.from(nonLotteryTeamAssignments.values()).includes(chainPick)) continue;
+                                      
+                                      // Found a chain: current team -> worsePick, worse team -> chainPick
+                                      console.log(`  🔄 Chain swap: Team #${currentAssignment.rosterId} (rank ${currentTeamRank}) → pick ${worsePick}, Team #${worsePickAssignment.rosterId} (rank ${worseTeamRank}) → pick ${chainPick}`);
+                                      worsePickAssignment.pick = chainPick;
+                                      currentAssignment.pick = worsePick;
+                                      bestValidPick = targetPick;
+                                      break;
+                                    }
+                                    if (bestValidPick > 0) break;
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                        if (bestValidPick > 0) break;
+                      }
+                    }
+                  }
+                } else {
+                  // No fall protection - find best (lowest) available pick
+                  for (let pick = 1; pick <= totalPicks; pick++) {
+                    if (lockedPicks.has(pick)) continue;
+                    if (results.some(r => r.pick === pick)) continue;
+                    if (Array.from(nonLotteryTeamAssignments.values()).includes(pick)) continue;
+                    
+                    bestValidPick = pick;
+                    break; // Found the best (lowest) available pick
+                  }
+                }
+                
+                if (bestValidPick > 0) {
+                  const teamObj = teamMap.get(team.rosterId);
+                  if (teamObj) {
+                    const rank = teamRanks?.get(team.rosterId);
+                    const maxAllowed = rank ? rank + (fallProtectionSpots || 0) : totalPicks;
+                    console.log(`✓ Assigning Team #${team.rosterId} (rank ${rank}, max=${maxAllowed}) to pick ${bestValidPick} (via fallback - calculating odds)`);
+                    
+                    // Calculate pre-lottery odds for this team at this pick (even though assigned via fallback)
+                    const preLotteryOdds = calculatePreLotteryProbability(
+                      team.rosterId,
+                      bestValidPick,
+                      eligibleTeams,
+                      lockedPicks,
+                      totalPicks,
+                      teamRanks,
+                      fallProtectionSpots
+                    );
+                    
+                    results.push({
+                      pick: bestValidPick,
+                      rosterId: team.rosterId,
+                      teamName: teamObj.displayName,
+                      odds: Math.round(preLotteryOdds * 10) / 10,
+                      wasLocked: false,
+                    });
+                    assignedRosterIds.add(team.rosterId);
+                  }
+                } else {
+                  console.error(`❌ Could not find valid pick for Team #${team.rosterId} (rank ${teamRanks?.get(team.rosterId)}, max=${teamRanks?.get(team.rosterId) ? teamRanks.get(team.rosterId)! + (fallProtectionSpots || 0) : totalPicks})`);
+                }
+              });
+              
+              // After assigning all remaining lottery teams, continue the loop to handle any remaining unassigned picks
+              // Don't break - we need to continue to assign any remaining picks
+              consecutiveFailures = 0;
+              currentPick++;
+              continue;
+            } else {
+              // All lottery teams assigned - check if we need to assign remaining picks to non-lottery teams
+              const remainingPicks: number[] = [];
+              for (let pick = 1; pick <= totalPicks; pick++) {
+                if (!lockedPicks.has(pick) && !results.some(r => r.pick === pick) && !Array.from(nonLotteryTeamAssignments.values()).includes(pick)) {
+                  remainingPicks.push(pick);
+                }
+              }
+              
+              // If there are remaining picks, assign them to non-lottery teams
+              if (remainingPicks.length > 0) {
+                const unassignedNonLottery = teams.filter(t => {
+                  const config = lotteryConfigs.get(t.rosterId);
+                  return config && !config.includeInLottery && !config.isLockedPick && !assignedRosterIds.has(t.rosterId);
+                });
+                
+                if (unassignedNonLottery.length > 0) {
+                  const sortedNonLottery = [...unassignedNonLottery].sort((a, b) => {
                 const aW = a.record?.wins ?? 0;
                 const aL = a.record?.losses ?? 0;
                 const aT = a.record?.ties ?? 0;
                 const bW = b.record?.wins ?? 0;
                 const bL = b.record?.losses ?? 0;
                 const bT = b.record?.ties ?? 0;
-                
                 const aPct = winPct(aW, aL, aT);
                 const bPct = winPct(bW, bL, bT);
-                
                 if (aPct !== bPct) return aPct - bPct;
                 if (aW !== bW) return aW - bW;
                 if (bL !== aL) return bL - aL;
@@ -438,22 +813,34 @@ export default function LotteryPage() {
                 return (b.rosterId ?? 0) - (a.rosterId ?? 0);
               });
               
-              const team = sortedRemaining[0];
+                  sortedNonLottery.forEach((team, index) => {
+                    if (index < remainingPicks.length) {
+                      const pick = remainingPicks[index];
               results.push({
-                pick: currentPick,
+                        pick,
                 rosterId: team.rosterId,
                 teamName: team.displayName,
                 odds: 0,
                 wasLocked: false,
               });
               assignedRosterIds.add(team.rosterId);
+                      console.warn(`✓ Assigned remaining non-lottery team #${team.rosterId} to pick ${pick}`);
+                    }
+                  });
+                }
+              }
+              
+              // All teams assigned - we're done
+              break;
             }
-            currentPick++;
-            continue;
           }
 
           const drawnRosterId = weightedRandomDraw(availableTeams);
-          if (drawnRosterId === null) break;
+          if (drawnRosterId === null) {
+            consecutiveFailures++;
+            currentPick++;
+            continue;
+          }
 
           const drawnTeam = teamMap.get(drawnRosterId);
           if (drawnTeam) {
@@ -462,8 +849,12 @@ export default function LotteryPage() {
               currentPick,
               eligibleTeams,
               lockedPicks,
-              totalPicks
+              totalPicks,
+              teamRanks,
+              fallProtectionSpots
             );
+            
+            console.log(`🎲 Drawing pick ${currentPick}: Team #${drawnRosterId} (${drawnTeam.displayName})`);
             
             results.push({
               pick: currentPick,
@@ -473,10 +864,289 @@ export default function LotteryPage() {
               wasLocked: false,
             });
             assignedRosterIds.add(drawnRosterId);
+            consecutiveFailures = 0; // Reset on successful assignment
           }
 
           currentPick++;
         }
+
+        // After loop, ensure ALL picks are assigned - this is critical
+        // Find all unassigned picks
+        const unassignedPicks: number[] = [];
+        for (let pick = 1; pick <= totalPicks; pick++) {
+          if (!lockedPicks.has(pick) && !results.some(r => r.pick === pick)) {
+            unassignedPicks.push(pick);
+          }
+        }
+        
+        if (unassignedPicks.length > 0) {
+          console.warn(`After loop: ${unassignedPicks.length} unassigned picks: ${unassignedPicks.join(', ')}`);
+          console.warn(`Results length: ${results.length}/${totalPicks}`);
+          
+          // First, try to assign any remaining lottery teams to valid picks they can take
+          const unassignedLotteryTeams = eligibleTeams.filter(t => !assignedRosterIds.has(t.rosterId));
+          if (unassignedLotteryTeams.length > 0) {
+            console.warn(`Unassigned lottery teams: ${unassignedLotteryTeams.map(t => t.rosterId).join(', ')}`);
+            
+            // Try to assign each unassigned lottery team to a valid pick
+            unassignedLotteryTeams.forEach((team) => {
+              if (fallProtectionEnabled && fallProtectionSpots && teamRanks) {
+                const rank = teamRanks.get(team.rosterId);
+                if (rank !== undefined) {
+                  const maxAllowedPick = rank + fallProtectionSpots;
+                  // Find highest unassigned pick <= maxAllowedPick
+                  for (let pick = Math.min(maxAllowedPick, totalPicks); pick >= 1; pick--) {
+                    if (pick > maxAllowedPick) continue;
+                    if (lockedPicks.has(pick)) continue;
+                    if (results.some(r => r.pick === pick)) continue;
+                    if (Array.from(nonLotteryTeamAssignments.values()).includes(pick)) continue;
+                    
+                    // Valid assignment - calculate odds even though assigned via fallback
+                    const teamObj = teams.find(t => t.rosterId === team.rosterId);
+                    if (teamObj) {
+                      const preLotteryOdds = calculatePreLotteryProbability(
+                        team.rosterId,
+                        pick,
+                        eligibleTeams,
+                        lockedPicks,
+                        totalPicks,
+                        teamRanks,
+                        fallProtectionSpots
+                      );
+                      results.push({
+                        pick,
+                        rosterId: team.rosterId,
+                        teamName: teamObj.displayName,
+                        odds: Math.round(preLotteryOdds * 10) / 10,
+                        wasLocked: false,
+                      });
+                      assignedRosterIds.add(team.rosterId);
+                      console.warn(`✓ Assigned remaining lottery team #${team.rosterId} to pick ${pick} (via fallback - odds: ${Math.round(preLotteryOdds * 10) / 10}%)`);
+                      break;
+                    }
+                  }
+                } else {
+                  // No rank - can take any pick - calculate odds
+                  const availablePick = unassignedPicks.find(p => !results.some(r => r.pick === p) && !Array.from(nonLotteryTeamAssignments.values()).includes(p));
+                  if (availablePick) {
+                    const teamObj = teams.find(t => t.rosterId === team.rosterId);
+                    if (teamObj) {
+                      const preLotteryOdds = calculatePreLotteryProbability(
+                        team.rosterId,
+                        availablePick,
+                        eligibleTeams,
+                        lockedPicks,
+                        totalPicks,
+                        teamRanks,
+                        fallProtectionSpots
+                      );
+                      results.push({
+                        pick: availablePick,
+                        rosterId: team.rosterId,
+                        teamName: teamObj.displayName,
+                        odds: Math.round(preLotteryOdds * 10) / 10,
+                        wasLocked: false,
+                      });
+                      assignedRosterIds.add(team.rosterId);
+                      console.warn(`✓ Assigned remaining lottery team #${team.rosterId} to pick ${availablePick} (no rank, via fallback - odds: ${Math.round(preLotteryOdds * 10) / 10}%)`);
+                    }
+                  }
+                }
+              } else {
+                // Fall protection not enabled - can take any pick - calculate odds
+                const availablePick = unassignedPicks.find(p => !results.some(r => r.pick === p) && !Array.from(nonLotteryTeamAssignments.values()).includes(p));
+                if (availablePick) {
+                  const teamObj = teams.find(t => t.rosterId === team.rosterId);
+                  if (teamObj) {
+                    const preLotteryOdds = calculatePreLotteryProbability(
+                      team.rosterId,
+                      availablePick,
+                      eligibleTeams,
+                      lockedPicks,
+                      totalPicks,
+                      teamRanks,
+                      fallProtectionSpots
+                    );
+                    results.push({
+                      pick: availablePick,
+                      rosterId: team.rosterId,
+                      teamName: teamObj.displayName,
+                      odds: Math.round(preLotteryOdds * 10) / 10,
+                      wasLocked: false,
+                    });
+                    assignedRosterIds.add(team.rosterId);
+                    console.warn(`✓ Assigned remaining lottery team #${team.rosterId} to pick ${availablePick} (via fallback - odds: ${Math.round(preLotteryOdds * 10) / 10}%)`);
+                  }
+                }
+              }
+            });
+          }
+          
+          // Recalculate unassigned picks after assigning lottery teams
+          const stillUnassignedPicks: number[] = [];
+          for (let pick = 1; pick <= totalPicks; pick++) {
+            if (!lockedPicks.has(pick) && !results.some(r => r.pick === pick)) {
+              stillUnassignedPicks.push(pick);
+            }
+          }
+          
+          // Then assign any remaining picks to non-lottery teams
+          if (stillUnassignedPicks.length > 0) {
+            const unassignedNonLottery = teams.filter(t => {
+              const config = lotteryConfigs.get(t.rosterId);
+              return config && !config.includeInLottery && !config.isLockedPick && !assignedRosterIds.has(t.rosterId);
+            });
+            
+            if (unassignedNonLottery.length > 0) {
+              const sortedNonLottery = [...unassignedNonLottery].sort((a, b) => {
+                const aW = a.record?.wins ?? 0;
+                const aL = a.record?.losses ?? 0;
+                const aT = a.record?.ties ?? 0;
+                const bW = b.record?.wins ?? 0;
+                const bL = b.record?.losses ?? 0;
+                const bT = b.record?.ties ?? 0;
+                const aPct = winPct(aW, aL, aT);
+                const bPct = winPct(bW, bL, bT);
+                if (aPct !== bPct) return aPct - bPct;
+                if (aW !== bW) return aW - bW;
+                if (bL !== aL) return bL - aL;
+                if (bT !== aT) return bT - aT;
+                return (b.rosterId ?? 0) - (a.rosterId ?? 0);
+              });
+              
+              sortedNonLottery.forEach((team, index) => {
+                if (index < stillUnassignedPicks.length) {
+                  const pick = stillUnassignedPicks[index];
+                  results.push({
+                    pick,
+                    rosterId: team.rosterId,
+                    teamName: team.displayName,
+                    odds: 0,
+                    wasLocked: false,
+                  });
+                  assignedRosterIds.add(team.rosterId);
+                  console.warn(`✓ Assigned remaining non-lottery team #${team.rosterId} to pick ${pick}`);
+                }
+              });
+            } else if (stillUnassignedPicks.length > 0) {
+              // No non-lottery teams left but still have unassigned picks
+              // Check if there are unassigned lottery teams that we couldn't assign due to fall protection
+              const stillUnassignedLotteryTeams = eligibleTeams.filter(t => !assignedRosterIds.has(t.rosterId));
+              
+              if (stillUnassignedLotteryTeams.length > 0) {
+                console.warn(`WARNING: ${stillUnassignedPicks.length} picks unassigned and ${stillUnassignedLotteryTeams.length} lottery teams unassigned`);
+                console.warn(`Unassigned picks: ${stillUnassignedPicks.join(', ')}`);
+                console.warn(`Unassigned lottery teams: ${stillUnassignedLotteryTeams.map(t => `#${t.rosterId}`).join(', ')}`);
+                
+                // Try to assign lottery teams to remaining picks, even if it violates fall protection
+                // (This shouldn't happen, but we need to complete the lottery)
+                // Still calculate odds for lottery teams
+                stillUnassignedPicks.forEach((pick, index) => {
+                  if (index < stillUnassignedLotteryTeams.length) {
+                    const team = stillUnassignedLotteryTeams[index];
+                    const teamObj = teams.find(t => t.rosterId === team.rosterId);
+                    if (teamObj) {
+                      const rank = teamRanks?.get(team.rosterId);
+                      const maxAllowed = rank ? rank + (fallProtectionSpots || 0) : totalPicks;
+                      console.warn(`⚠️ Assigning Team #${team.rosterId} (rank ${rank}, max=${maxAllowed}) to pick ${pick} - may violate fall protection (calculating odds)`);
+                      
+                      // Calculate odds even though this may violate fall protection
+                      const preLotteryOdds = calculatePreLotteryProbability(
+                        team.rosterId,
+                        pick,
+                        eligibleTeams,
+                        lockedPicks,
+                        totalPicks,
+                        teamRanks,
+                        fallProtectionSpots
+                      );
+                      
+                      results.push({
+                        pick,
+                        rosterId: team.rosterId,
+                        teamName: teamObj.displayName,
+                        odds: Math.round(preLotteryOdds * 10) / 10,
+                        wasLocked: false,
+                      });
+                      assignedRosterIds.add(team.rosterId);
+                    }
+                  }
+                });
+              } else {
+                // No lottery teams left either - assign to any unassigned team
+                console.error(`ERROR: ${stillUnassignedPicks.length} picks unassigned but no teams available`);
+                const anyUnassignedTeam = teams.find(t => !assignedRosterIds.has(t.rosterId));
+                if (anyUnassignedTeam) {
+                  stillUnassignedPicks.forEach((pick) => {
+                    results.push({
+                      pick,
+                      rosterId: anyUnassignedTeam.rosterId,
+                      teamName: anyUnassignedTeam.displayName,
+                      odds: 0,
+                      wasLocked: false,
+                    });
+                    assignedRosterIds.add(anyUnassignedTeam.rosterId);
+                    console.warn(`✓ Assigned unassigned team #${anyUnassignedTeam.rosterId} to pick ${pick} (fallback)`);
+                  });
+                }
+              }
+            }
+          }
+        }
+
+        // Final verification - ensure ALL picks are assigned
+        // If still missing picks, assign them to any available team (shouldn't happen, but be safe)
+        if (results.length < totalPicks) {
+          const finalUnassignedPicks: number[] = [];
+          for (let pick = 1; pick <= totalPicks; pick++) {
+            if (!lockedPicks.has(pick) && !results.some(r => r.pick === pick)) {
+              finalUnassignedPicks.push(pick);
+            }
+          }
+          
+          if (finalUnassignedPicks.length > 0) {
+            console.error(`CRITICAL: ${finalUnassignedPicks.length} picks still unassigned: ${finalUnassignedPicks.join(', ')}`);
+            
+            // Find any unassigned teams (shouldn't happen, but handle it)
+            const anyUnassignedTeams = teams.filter(t => !assignedRosterIds.has(t.rosterId));
+            
+            if (anyUnassignedTeams.length > 0) {
+              // Assign remaining picks to unassigned teams
+              finalUnassignedPicks.forEach((pick, index) => {
+                if (index < anyUnassignedTeams.length) {
+                  const team = anyUnassignedTeams[index];
+                  results.push({
+                    pick,
+                    rosterId: team.rosterId,
+                    teamName: team.displayName,
+                    odds: 0,
+                    wasLocked: false,
+                  });
+                  assignedRosterIds.add(team.rosterId);
+                  console.error(`FORCED assignment: Team #${team.rosterId} to pick ${pick}`);
+                }
+              });
+            } else {
+              // No teams available - this is a serious error
+              console.error(`ERROR: No unassigned teams available for ${finalUnassignedPicks.length} remaining picks`);
+              setError(`Lottery incomplete: Only ${results.length} of ${totalPicks} picks were assigned. ${finalUnassignedPicks.length} picks could not be assigned.`);
+              setIsRunningLottery(false);
+              return;
+            }
+          }
+        }
+        
+        // Final check
+        if (results.length < totalPicks) {
+          console.error(`FINAL ERROR: Still only ${results.length}/${totalPicks} picks assigned after cleanup`);
+          setError(`Lottery incomplete: Only ${results.length} of ${totalPicks} picks were assigned.`);
+          setIsRunningLottery(false);
+          return;
+        }
+        
+        // Fall protection is now enforced during the draw, so no post-processing needed
+        // Just ensure results are sorted by pick number
+          results.sort((a, b) => a.pick - b.pick);
 
         // Calculate expected picks based on odds for the highest available (unlocked) pick
         // Find the highest available pick (first pick that isn't locked)
@@ -498,7 +1168,9 @@ export default function LotteryPage() {
             highestAvailablePick,
             eligibleTeams,
             lockedPicks,
-            totalPicks
+            totalPicks,
+            teamRanks,
+            fallProtectionSpots
           );
           teamOddsForHighestPick.push({
             rosterId: team.rosterId,
@@ -864,6 +1536,8 @@ export default function LotteryPage() {
         season: lotteryData.leagueInfo?.season ?? "Unknown Season",
         results: finalResults,
         teams: lotteryData.teams,
+        fallProtectionEnabled: lotteryData.fallProtectionEnabled,
+        fallProtectionSpots: lotteryData.fallProtectionSpots,
       };
 
       // Save to server via API
@@ -1199,6 +1873,20 @@ export default function LotteryPage() {
         <p className="mt-2 text-sm text-zinc-400">
           This configuration was finalized and cannot be changed.
         </p>
+        
+        {/* Fall Protection Info */}
+        {lotteryData?.fallProtectionEnabled && (
+          <div className="mt-4 mb-4 rounded-lg border border-blue-800/50 bg-blue-950/20 px-4 py-3">
+            <div className="flex items-center gap-2 text-sm text-blue-200">
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              <span>
+                <strong>NBA-Style Fall Protection Enabled:</strong> Teams cannot fall more than {lotteryData.fallProtectionSpots || 1} spot{lotteryData.fallProtectionSpots !== 1 ? 's' : ''} from their record-based position
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Desktop Table */}
         <div className="hidden sm:block mt-6 overflow-x-auto -mx-4 px-4 sm:-mx-6 sm:px-6 relative">
@@ -1375,6 +2063,18 @@ export default function LotteryPage() {
               </button>
             </div>
           </div>
+          {lotteryData?.fallProtectionEnabled && (
+            <div className="mt-4 mb-4 rounded-lg border border-blue-800/50 bg-blue-950/20 px-4 py-3">
+              <div className="flex items-center gap-2 text-sm text-blue-200">
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                <span>
+                  <strong>Fall Protection Enabled:</strong> Teams cannot fall more than {lotteryData.fallProtectionSpots || 1} spot{lotteryData.fallProtectionSpots !== 1 ? 's' : ''} from their record-based position
+                </span>
+              </div>
+            </div>
+          )}
           <div className="mt-6 space-y-3 sm:space-y-2">
             {finalResults.map((result) => {
               const team = teams.find((t) => t.rosterId === result.rosterId);

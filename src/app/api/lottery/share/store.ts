@@ -12,6 +12,8 @@ type ShareData = {
   season: string;
   results: any[];
   teams: any[];
+  fallProtectionEnabled?: boolean;
+  fallProtectionSpots?: number;
 };
 
 // Calculate expiration date (30 days from now)
@@ -34,6 +36,8 @@ export async function saveShare(shareId: string, data: ShareData): Promise<void>
       season: data.season,
       results: data.results,
       teams: data.teams,
+      fallProtectionEnabled: data.fallProtectionEnabled,
+      fallProtectionSpots: data.fallProtectionSpots,
       expiresAt: getExpirationDate(),
     };
 
@@ -75,6 +79,8 @@ export async function getShare(shareId: string): Promise<ShareData | undefined> 
       season: shareDoc.season,
       results: shareDoc.results,
       teams: shareDoc.teams,
+      fallProtectionEnabled: shareDoc.fallProtectionEnabled,
+      fallProtectionSpots: shareDoc.fallProtectionSpots,
     };
   } catch (error) {
     console.error('Error getting share from MongoDB:', error);

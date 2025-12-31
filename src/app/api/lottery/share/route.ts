@@ -4,7 +4,7 @@ import { saveShare } from "./store";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { shareId, timestamp, leagueId, leagueName, season, results, teams } = body;
+    const { shareId, timestamp, leagueId, leagueName, season, results, teams, fallProtectionEnabled, fallProtectionSpots } = body;
 
     if (!shareId || !results || !teams) {
       return NextResponse.json(
@@ -21,6 +21,8 @@ export async function POST(req: Request) {
       season: season || "Unknown Season",
       results,
       teams,
+      fallProtectionEnabled,
+      fallProtectionSpots,
     });
 
     return NextResponse.json({ success: true, shareId });
