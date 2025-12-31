@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import LotteryCounter from "./components/LotteryCounter";
+import LotteryCounterServer from "./components/LotteryCounterServer";
 
 export const metadata: Metadata = {
   title: "Fantasy Football Draft Lottery Generator | Sleeper League Lottery Tool",
@@ -134,7 +134,7 @@ export default function Home() {
             View History
           </Link>
         </div>
-        <LotteryCounter />
+        <LotteryCounterServer />
       </section>
 
       {/* SEO Rich Content Section */}
