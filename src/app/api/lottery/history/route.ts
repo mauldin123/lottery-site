@@ -64,6 +64,8 @@ export async function GET(req: Request) {
         lotteryConfigs: entry.lotteryConfigs || [],
       },
       shareId: entry.shareId,
+      fallProtectionEnabled: entry.fallProtectionEnabled,
+      fallProtectionSpots: entry.fallProtectionSpots,
     }));
 
     return NextResponse.json({ history: formattedHistory }, {
@@ -122,6 +124,8 @@ export async function POST(req: Request) {
       teams,
       shareId,
       lotteryConfigs,
+      fallProtectionEnabled,
+      fallProtectionSpots,
     } = body;
 
     if (!username || !leagueId || !results || !teams) {
@@ -148,6 +152,8 @@ export async function POST(req: Request) {
       teams,
       lotteryConfigs: lotteryConfigs || undefined,
       shareId: shareId || undefined,
+      fallProtectionEnabled: fallProtectionEnabled || undefined,
+      fallProtectionSpots: fallProtectionSpots || undefined,
     };
 
     const result = await collection.insertOne(historyDoc);
