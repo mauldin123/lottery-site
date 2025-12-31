@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { HistoryDocument } from "@/lib/models";
 
@@ -104,6 +105,56 @@ export async function POST(req: Request) {
     console.error("Error in POST /api/lottery/history:", e);
     return NextResponse.json(
       { error: "Failed to save history. " + (e?.message || "") },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE - Delete history entry by ID and username (for security)
+export async function DELETE(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+    const username = searchParams.get("username");
+
+    if (!id || !username) {
+      return NextResponse.json(
+        { error: "Missing required parameters: id and username." },
+        { status: 400 }
+      );
+    }
+
+    const db = await getDb();
+    const collection = db.collection<HistoryDocument>("history");
+
+    // Verify the entry belongs to this username before deleting (security check)
+    let objectId: ObjectId;
+    try {
+      objectId = new ObjectId(id);
+    } catch (e) {
+      return NextResponse.json(
+        { error: "Invalid lottery ID." },
+        { status: 400 }
+      );
+    }
+
+    const result = await collection.deleteOne({
+      _id: objectId,
+      username: username.trim(),
+    });
+
+    if (result.deletedCount === 0) {
+      return NextResponse.json(
+        { error: "Lottery not found or you don't have permission to delete it." },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (e: any) {
+    console.error("Error in DELETE /api/lottery/history:", e);
+    return NextResponse.json(
+      { error: "Failed to delete history. " + (e?.message || "") },
       { status: 500 }
     );
   }

@@ -100,14 +100,45 @@ export default function HistoryPage() {
     }
   }
 
-  function deleteLottery(id: string): void {
+  async function deleteLottery(id: string): Promise<void> {
     if (!confirm("Are you sure you want to delete this lottery? This action cannot be undone.")) {
       return;
     }
 
-    // Note: Delete functionality removed for database-backed history
-    // If you want to add delete, you'd need to create a DELETE API endpoint
-    setError("Delete functionality is not available for database-backed history. Contact support if you need to remove a lottery.");
+    const usernameValue = username.trim();
+    if (!usernameValue) {
+      setError("Username is required to delete a lottery.");
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/api/lottery/history?id=${encodeURIComponent(id)}&username=${encodeURIComponent(usernameValue)}`,
+        { method: "DELETE" }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to delete lottery");
+      }
+
+      // Remove from local state
+      const updated = savedLotteries.filter((l) => l.id !== id);
+      setSavedLotteries(updated);
+
+      // Clear selection if deleted lottery was selected
+      if (selectedLottery?.id === id) {
+        if (updated.length > 0) {
+          setSelectedLottery(updated[0]);
+        } else {
+          setSelectedLottery(null);
+        }
+      }
+
+      setError(null);
+    } catch (e: any) {
+      setError("Failed to delete lottery. " + (e?.message || ""));
+    }
   }
 
   function formatDate(timestamp: string): string {
