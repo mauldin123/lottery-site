@@ -26,7 +26,7 @@ export default async function LotteryCounterServer() {
       </div>
       <p className="text-emerald-200/70 text-sm">
         {count > 0 
-          ? "Serving fantasy football leagues worldwide"
+          ? "Serving Dynasty Fantasy Football Leagues Worldwide!"
           : ""
         }
       </p>

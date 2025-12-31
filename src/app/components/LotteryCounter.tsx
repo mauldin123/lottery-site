@@ -48,7 +48,7 @@ export default function LotteryCounter() {
       <p className="text-emerald-200/70 text-sm">
         {count !== null && count > 0 
           ? "Serving Dynasty Fantasy Football Leagues Worldwide!"
-          : "" // "Join thousands of leagues using our lottery system"
+          : ""
         }
       </p>
     </div>
