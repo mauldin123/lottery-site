@@ -2280,11 +2280,33 @@ export default function LeaguePage() {
                     </label>
                     <input
                       type="number"
+                      inputMode="numeric"
                       min="1"
                       max="10"
+                      step="1"
                       value={fallProtectionSpots}
-                      onChange={(e) => setFallProtectionSpots(Math.max(1, Math.min(10, parseInt(e.target.value) || 4)))}
-                      className="w-20 rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-sm text-zinc-100"
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '' || val === '-') {
+                          // Allow empty or minus sign while typing
+                          return;
+                        }
+                        const num = parseInt(val, 10);
+                        if (!isNaN(num)) {
+                          setFallProtectionSpots(Math.max(1, Math.min(10, num)));
+                        }
+                      }}
+                      onBlur={(e) => {
+                        // Ensure valid value on blur
+                        const val = parseInt(e.target.value, 10);
+                        if (isNaN(val) || val < 1) {
+                          setFallProtectionSpots(4);
+                        } else if (val > 10) {
+                          setFallProtectionSpots(10);
+                        }
+                      }}
+                      className="w-20 rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-sm text-zinc-100 min-h-[44px] touch-manipulation"
+                      style={{ WebkitAppearance: 'none', MozAppearance: 'textfield' }}
                     />
                     <p className="text-xs text-zinc-500 mt-1">
                       Example: With 4 spots, worst team can get picks 1-5 (not 1-{teams.length})
