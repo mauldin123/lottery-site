@@ -2,7 +2,7 @@
 import { NextRequest } from 'next/server';
 import { getShare } from '../../store';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 export async function GET(
   request: NextRequest,
@@ -16,7 +16,7 @@ export async function GET(
       return new Response("Missing shareId", { status: 400 });
     }
 
-    const shareData = getShare(shareId);
+    const shareData = await getShare(shareId);
 
     if (!shareData) {
       return new Response("Share not found", { status: 404 });
