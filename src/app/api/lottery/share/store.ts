@@ -1,5 +1,8 @@
-// Shared in-memory store for lottery shares
-// Note: This resets on server restart. For production, use a database.
+// MongoDB-based store for lottery shares
+// Shares persist across server restarts and expire after 30 days
+
+import { getDb } from '@/lib/mongodb';
+import type { ShareDocument } from '@/lib/models';
 
 type ShareData = {
   id: string;
@@ -11,28 +14,81 @@ type ShareData = {
   teams: any[];
 };
 
-const shareStore = new Map<string, ShareData>();
+// Calculate expiration date (30 days from now)
+function getExpirationDate(): Date {
+  const date = new Date();
+  date.setDate(date.getDate() + 30);
+  return date;
+}
 
-// Clean up old shares (older than 30 days) periodically
-if (typeof setInterval !== 'undefined') {
-  setInterval(() => {
-    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-    for (const [shareId, data] of shareStore.entries()) {
-      if (new Date(data.timestamp).getTime() < thirtyDaysAgo) {
-        shareStore.delete(shareId);
-      }
+export async function saveShare(shareId: string, data: ShareData): Promise<void> {
+  try {
+    const db = await getDb();
+    const collection = db.collection<ShareDocument>('shares');
+    
+    const shareDoc: ShareDocument = {
+      shareId,
+      timestamp: new Date(data.timestamp),
+      leagueId: data.leagueId,
+      leagueName: data.leagueName,
+      season: data.season,
+      results: data.results,
+      teams: data.teams,
+      expiresAt: getExpirationDate(),
+    };
+
+    await collection.replaceOne(
+      { shareId },
+      shareDoc,
+      { upsert: true }
+    );
+  } catch (error) {
+    console.error('Error saving share to MongoDB:', error);
+    throw error;
+  }
+}
+
+export async function getShare(shareId: string): Promise<ShareData | undefined> {
+  try {
+    const db = await getDb();
+    const collection = db.collection<ShareDocument>('shares');
+    
+    const shareDoc = await collection.findOne({ shareId });
+    
+    if (!shareDoc) {
+      return undefined;
     }
-  }, 24 * 60 * 60 * 1000); // Run once per day
+
+    // Check if expired
+    if (new Date() > shareDoc.expiresAt) {
+      // Delete expired share
+      await collection.deleteOne({ shareId });
+      return undefined;
+    }
+
+    // Convert back to ShareData format
+    return {
+      id: shareDoc.shareId,
+      timestamp: shareDoc.timestamp.toISOString(),
+      leagueId: shareDoc.leagueId,
+      leagueName: shareDoc.leagueName,
+      season: shareDoc.season,
+      results: shareDoc.results,
+      teams: shareDoc.teams,
+    };
+  } catch (error) {
+    console.error('Error getting share from MongoDB:', error);
+    throw error;
+  }
 }
 
-export function saveShare(shareId: string, data: ShareData): void {
-  shareStore.set(shareId, data);
-}
-
-export function getShare(shareId: string): ShareData | undefined {
-  return shareStore.get(shareId);
-}
-
-export function deleteShare(shareId: string): void {
-  shareStore.delete(shareId);
+export async function deleteShare(shareId: string): Promise<void> {
+  try {
+    const db = await getDb();
+    const collection = db.collection<ShareDocument>('shares');
+    await collection.deleteOne({ shareId });
+  } catch (error) {
+    console.error('Error deleting share from MongoDB:', error);
+    throw error;
+  }
 }

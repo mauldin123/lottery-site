@@ -35,27 +35,53 @@ export default function HistoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [filterSeason, setFilterSeason] = useState<string>("all");
   const [filterLeague, setFilterLeague] = useState<string>("all");
+  const [username, setUsername] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [hasSearched, setHasSearched] = useState<boolean>(false);
 
+  // Try to load username from localStorage on mount
   useEffect(() => {
-    loadSavedLotteries();
+    const storedUsername = localStorage.getItem("sleeperUsername");
+    if (storedUsername) {
+      setUsername(storedUsername);
+      // Auto-load if username exists
+      loadSavedLotteries(storedUsername);
+    }
   }, []);
 
-  function loadSavedLotteries(): void {
+  async function loadSavedLotteries(usernameToLoad?: string): Promise<void> {
+    const usernameValue = usernameToLoad || username.trim();
+    
+    if (!usernameValue || usernameValue.length < 2) {
+      setError("Please enter a valid Sleeper username (at least 2 characters).");
+      setHasSearched(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setHasSearched(true);
+
     try {
-      const stored = localStorage.getItem("savedLotteries");
-      if (!stored) {
-        setSavedLotteries([]);
-        return;
+      const response = await fetch(
+        `/api/lottery/history?username=${encodeURIComponent(usernameValue)}`
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to load history");
       }
 
-      const lotteries = JSON.parse(stored) as SavedLottery[];
-      // Sort by timestamp, newest first
-      const sorted = lotteries.sort((a, b) => 
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      );
-      setSavedLotteries(sorted);
+      const data = await response.json();
+      setSavedLotteries(data.history || []);
+      
+      // Save username to localStorage for convenience
+      localStorage.setItem("sleeperUsername", usernameValue);
     } catch (e: any) {
       setError("Failed to load saved lotteries. " + (e?.message || ""));
+      setSavedLotteries([]);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -64,21 +90,9 @@ export default function HistoryPage() {
       return;
     }
 
-    try {
-      const stored = localStorage.getItem("savedLotteries");
-      if (!stored) return;
-
-      const lotteries = JSON.parse(stored) as SavedLottery[];
-      const filtered = lotteries.filter((l) => l.id !== id);
-      localStorage.setItem("savedLotteries", JSON.stringify(filtered));
-      loadSavedLotteries();
-      
-      if (selectedLottery?.id === id) {
-        setSelectedLottery(null);
-      }
-    } catch (e: any) {
-      setError("Failed to delete lottery. " + (e?.message || ""));
-    }
+    // Note: Delete functionality removed for database-backed history
+    // If you want to add delete, you'd need to create a DELETE API endpoint
+    setError("Delete functionality is not available for database-backed history. Contact support if you need to remove a lottery.");
   }
 
   function formatDate(timestamp: string): string {
@@ -186,13 +200,51 @@ export default function HistoryPage() {
         </Link>
       </div>
 
+      {/* Username Input */}
+      <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4 sm:p-6">
+        <label className="block text-sm font-medium text-zinc-300 mb-2">
+          Sleeper Username
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            className="flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:border-zinc-700 focus:outline-none"
+            placeholder="Enter your Sleeper username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                loadSavedLotteries();
+              }
+            }}
+          />
+          <button
+            className="rounded-lg border border-emerald-800 bg-emerald-900 px-4 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => loadSavedLotteries()}
+            disabled={loading || username.trim().length < 2}
+          >
+            {loading ? "Loading..." : "Load History"}
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-zinc-400">
+          Enter the Sleeper username you used when creating lotteries to view your history across all devices.
+        </p>
+      </div>
+
       {error ? (
         <div className="mt-6 rounded-2xl border border-red-900/60 bg-red-950/40 px-5 py-4 text-red-200">
           {error}
         </div>
       ) : null}
 
-      {savedLotteries.length === 0 ? (
+      {!hasSearched ? (
+        <div className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-8 text-center">
+          <h2 className="text-2xl font-semibold text-zinc-100 mb-2">Enter Your Username</h2>
+          <p className="text-zinc-400 mb-6">
+            Enter your Sleeper username above to view your lottery history.
+          </p>
+        </div>
+      ) : savedLotteries.length === 0 ? (
         <div className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-8 text-center">
           <h2 className="text-2xl font-semibold text-zinc-100 mb-2">No Saved Lotteries</h2>
           <p className="text-zinc-400 mb-6">

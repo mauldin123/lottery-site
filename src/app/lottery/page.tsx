@@ -41,6 +41,7 @@ type LotteryFinalizeData = {
   teams: TeamsResult["teams"];
   lotteryConfigs: Array<[number, LotteryTeamConfig]>;
   timestamp: string;
+  username?: string;
 };
 
 // Helper functions
@@ -264,6 +265,55 @@ export default function LotteryPage() {
       setError("Failed to load lottery configuration. " + (e?.message || ""));
     }
   }, []);
+
+  // Save history and increment counter (fire and forget)
+  async function saveHistoryAndIncrementCounter(results: LotteryResult[]): Promise<void> {
+    if (!lotteryData) return;
+
+    const username = lotteryData.username;
+    if (!username || username.trim().length < 2) {
+      // No username, skip history save but still increment counter
+      try {
+        await fetch("/api/lottery/counter", { method: "POST" });
+      } catch (e) {
+        console.error("Failed to increment counter:", e);
+      }
+      return;
+    }
+
+    try {
+      // Save history
+      const historyResponse = await fetch("/api/lottery/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: username.trim(),
+          leagueId: lotteryData.leagueId,
+          leagueName: lotteryData.leagueInfo?.name || "Unknown League",
+          season: lotteryData.leagueInfo?.season || "Unknown Season",
+          results: results,
+          teams: lotteryData.teams,
+          lotteryConfigs: lotteryData.lotteryConfigs,
+        }),
+      });
+
+      if (!historyResponse.ok) {
+        console.error("Failed to save history");
+      }
+
+      // Increment counter
+      const counterResponse = await fetch("/api/lottery/counter", {
+        method: "POST",
+      });
+
+      if (!counterResponse.ok) {
+        console.error("Failed to increment counter");
+      }
+    } catch (e) {
+      // Silently fail - don't interrupt user experience
+      console.error("Error saving history or incrementing counter:", e);
+    }
+  }
 
   function runFinalLottery(): void {
     if (!lotteryData) {
@@ -509,6 +559,9 @@ export default function LotteryPage() {
 
         resultsWithMostLikely.sort((a, b) => a.pick - b.pick);
         setFinalResults(resultsWithMostLikely);
+        
+        // Save history and increment counter (fire and forget - don't block UI)
+        saveHistoryAndIncrementCounter(resultsWithMostLikely);
         
         // Auto-reveal locked picks and assigned picks (odds === 0)
         const autoRevealedPicks = new Set<number>();

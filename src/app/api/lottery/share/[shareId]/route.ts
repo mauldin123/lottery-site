@@ -16,7 +16,7 @@ export async function GET(
       );
     }
 
-    const shareData = getShare(shareId);
+    const shareData = await getShare(shareId);
 
     if (!shareData) {
       return NextResponse.json(
@@ -27,6 +27,7 @@ export async function GET(
 
     return NextResponse.json(shareData);
   } catch (e: any) {
+    console.error('Error in GET /api/lottery/share/[shareId]:', e);
     return NextResponse.json(
       { error: "Failed to load share data. " + (e?.message || "") },
       { status: 500 }

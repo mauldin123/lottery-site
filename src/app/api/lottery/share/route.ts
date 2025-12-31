@@ -13,7 +13,7 @@ export async function POST(req: Request) {
       );
     }
 
-    saveShare(shareId, {
+    await saveShare(shareId, {
       id: shareId,
       timestamp: timestamp || new Date().toISOString(),
       leagueId,
@@ -25,6 +25,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, shareId });
   } catch (e: any) {
+    console.error('Error in POST /api/lottery/share:', e);
     return NextResponse.json(
       { error: "Failed to save share data. " + (e?.message || "") },
       { status: 500 }

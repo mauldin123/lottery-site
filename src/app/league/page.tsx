@@ -1175,6 +1175,7 @@ export default function LeaguePage() {
       teams,
       lotteryConfigs: Array.from(lotteryConfigs.entries()),
       timestamp: new Date().toISOString(),
+      username: foundUser?.username || username || undefined,
     };
 
     try {
