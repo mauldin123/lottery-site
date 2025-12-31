@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const baseUrl = `${protocol}://${host}`;
   
   try {
-    const shareData = getShare(shareId);
+    const shareData = await getShare(shareId);
     
     if (shareData) {
       const description = `Draft lottery results for ${shareData.leagueName} - ${shareData.season}. Top pick: ???`;
