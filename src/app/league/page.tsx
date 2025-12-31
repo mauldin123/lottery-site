@@ -2380,9 +2380,7 @@ export default function LeaguePage() {
                                     : "text-zinc-100"
                                 }`}
                                 value={!config.includeInLottery ? "0" : (percentInputValues.get(team.rosterId) ?? (config.calculatedPercent === 0 ? "" : String(Math.round(config.calculatedPercent))))}
-                                placeholder="0"
-                              disabled={!config.includeInLottery}
-                              onChange={(e) => {
+                                onChange={(e) => {
                                 let inputValue = e.target.value;
                                 
                                 // Strip "%" symbol if user types it
