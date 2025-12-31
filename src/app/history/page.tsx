@@ -73,10 +73,25 @@ export default function HistoryPage() {
       }
 
       const data = await response.json();
-      setSavedLotteries(data.history || []);
+      const history = data.history || [];
+      setSavedLotteries(history);
+      
+      // Auto-select the most recent lottery (first item since sorted by timestamp desc)
+      if (history.length > 0) {
+        setSelectedLottery(history[0]);
+      } else {
+        setSelectedLottery(null);
+      }
       
       // Save username to localStorage for convenience
       localStorage.setItem("sleeperUsername", usernameValue);
+      
+      // Log for debugging
+      if (history.length > 0) {
+        console.log(`Found ${history.length} lottery(ies) for username: ${usernameValue}`);
+      } else {
+        console.log(`No history found for username: ${usernameValue}`);
+      }
     } catch (e: any) {
       setError("Failed to load saved lotteries. " + (e?.message || ""));
       setSavedLotteries([]);
@@ -182,6 +197,20 @@ export default function HistoryPage() {
     if (filterLeague !== "all" && lottery.leagueId !== filterLeague) return false;
     return true;
   });
+
+  // Auto-select first lottery if current selection is not in filtered list
+  useEffect(() => {
+    if (filteredLotteries.length > 0) {
+      const isCurrentSelectedInFiltered = selectedLottery && 
+        filteredLotteries.some(l => l.id === selectedLottery.id);
+      
+      if (!isCurrentSelectedInFiltered) {
+        setSelectedLottery(filteredLotteries[0]);
+      }
+    } else {
+      setSelectedLottery(null);
+    }
+  }, [filteredLotteries, selectedLottery]);
 
   return (
     <div className="mx-auto max-w-6xl px-3 sm:px-4 py-6 sm:py-10">

@@ -268,11 +268,15 @@ export default function LotteryPage() {
 
   // Save history and increment counter (fire and forget)
   async function saveHistoryAndIncrementCounter(results: LotteryResult[]): Promise<void> {
-    if (!lotteryData) return;
+    if (!lotteryData) {
+      console.warn("No lottery data available for saving history");
+      return;
+    }
 
     const username = lotteryData.username;
     if (!username || username.trim().length < 2) {
       // No username, skip history save but still increment counter
+      console.warn("No username found in lottery data, skipping history save");
       try {
         await fetch("/api/lottery/counter", { method: "POST" });
       } catch (e) {
@@ -283,22 +287,28 @@ export default function LotteryPage() {
 
     try {
       // Save history
+      const historyPayload = {
+        username: username.trim(),
+        leagueId: lotteryData.leagueId,
+        leagueName: lotteryData.leagueInfo?.name || "Unknown League",
+        season: lotteryData.leagueInfo?.season || "Unknown Season",
+        results: results,
+        teams: lotteryData.teams,
+        lotteryConfigs: lotteryData.lotteryConfigs,
+      };
+
+      console.log("Saving history for username:", username.trim());
       const historyResponse = await fetch("/api/lottery/history", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: username.trim(),
-          leagueId: lotteryData.leagueId,
-          leagueName: lotteryData.leagueInfo?.name || "Unknown League",
-          season: lotteryData.leagueInfo?.season || "Unknown Season",
-          results: results,
-          teams: lotteryData.teams,
-          lotteryConfigs: lotteryData.lotteryConfigs,
-        }),
+        body: JSON.stringify(historyPayload),
       });
 
       if (!historyResponse.ok) {
-        console.error("Failed to save history");
+        const errorData = await historyResponse.json().catch(() => ({}));
+        console.error("Failed to save history:", errorData.error || historyResponse.statusText);
+      } else {
+        console.log("History saved successfully");
       }
 
       // Increment counter
@@ -308,9 +318,11 @@ export default function LotteryPage() {
 
       if (!counterResponse.ok) {
         console.error("Failed to increment counter");
+      } else {
+        console.log("Counter incremented successfully");
       }
     } catch (e) {
-      // Silently fail - don't interrupt user experience
+      // Log error but don't interrupt user experience
       console.error("Error saving history or incrementing counter:", e);
     }
   }
