@@ -2816,6 +2816,13 @@ export default function LeaguePage() {
                     </div>
                     
                     <div>
+                      <div className="text-xs text-zinc-400 mb-1">Balls</div>
+                      <div className="text-sm text-zinc-300">
+                        {config.includeInLottery && !config.isLockedPick ? (config.balls ?? 0) : 0}
+                      </div>
+                    </div>
+                    
+                    <div>
                       <label className="flex items-center gap-2 text-sm">
                         <input
                           type="checkbox"
