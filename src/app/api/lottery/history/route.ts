@@ -3,6 +3,10 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { HistoryDocument } from "@/lib/models";
 
+// Force dynamic rendering to prevent caching
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 // GET - Retrieve history by username
 export async function GET(req: Request) {
   try {
@@ -12,7 +16,14 @@ export async function GET(req: Request) {
     if (!username || username.trim().length === 0) {
       return NextResponse.json(
         { error: "Username is required." },
-        { status: 400 }
+        { 
+          status: 400,
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          },
+        }
       );
     }
 
@@ -40,7 +51,13 @@ export async function GET(req: Request) {
       shareId: entry.shareId,
     }));
 
-    return NextResponse.json({ history: formattedHistory });
+    return NextResponse.json({ history: formattedHistory }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    });
   } catch (e: any) {
     console.error("Error in GET /api/lottery/history:", e);
     const errorMessage = e?.message || "Unknown error";
@@ -48,12 +65,26 @@ export async function GET(req: Request) {
     if (errorMessage.includes("SSL") || errorMessage.includes("TLS")) {
       return NextResponse.json(
         { error: "Database connection error. Please check MongoDB network access settings." },
-        { status: 500 }
+        { 
+          status: 500,
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          },
+        }
       );
     }
     return NextResponse.json(
       { error: "Failed to retrieve history. " + errorMessage },
-      { status: 500 }
+      { 
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
     );
   }
 }

@@ -9,7 +9,12 @@ export default function LotteryCounter() {
   useEffect(() => {
     async function fetchCounter() {
       try {
-        const response = await fetch("/api/lottery/counter");
+        const response = await fetch("/api/lottery/counter", {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+          },
+        });
         if (response.ok) {
           const data = await response.json();
           setCount(data.count || 0);
@@ -24,7 +29,13 @@ export default function LotteryCounter() {
       }
     }
 
+    // Fetch immediately
     fetchCounter();
+
+    // Poll for updates every 30 seconds
+    const interval = setInterval(fetchCounter, 30000);
+
+    return () => clearInterval(interval);
   }, []);
 
   if (loading) {

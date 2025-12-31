@@ -64,7 +64,13 @@ export default function HistoryPage() {
 
     try {
       const response = await fetch(
-        `/api/lottery/history?username=${encodeURIComponent(usernameValue)}`
+        `/api/lottery/history?username=${encodeURIComponent(usernameValue)}`,
+        {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+          },
+        }
       );
 
       if (!response.ok) {
