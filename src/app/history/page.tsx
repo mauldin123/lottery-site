@@ -68,12 +68,16 @@ export default function HistoryPage() {
     setHasSearched(true);
 
     try {
+      // Normalize username to lowercase for consistent searching (API will also normalize, but doing it here too)
+      const normalizedUsername = usernameValue.toLowerCase();
+      console.log("Loading history for username (normalized):", normalizedUsername);
+      
       // Add timeout for mobile networks
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
       
       const response = await fetch(
-        `/api/lottery/history?username=${encodeURIComponent(usernameValue)}`,
+        `/api/lottery/history?username=${encodeURIComponent(normalizedUsername)}`,
         {
           cache: 'no-store',
           signal: controller.signal,

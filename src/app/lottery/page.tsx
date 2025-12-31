@@ -287,8 +287,10 @@ export default function LotteryPage() {
 
     try {
       // Save history
+      // Normalize username to lowercase for consistency (API will also normalize, but doing it here too)
+      const normalizedUsername = username.trim().toLowerCase();
       const historyPayload = {
-        username: username.trim(),
+        username: normalizedUsername,
         leagueId: lotteryData.leagueId,
         leagueName: lotteryData.leagueInfo?.name || "Unknown League",
         season: lotteryData.leagueInfo?.season || "Unknown Season",
@@ -297,7 +299,7 @@ export default function LotteryPage() {
         lotteryConfigs: lotteryData.lotteryConfigs,
       };
 
-      console.log("Saving history for username:", username.trim());
+      console.log("Saving history for username (normalized):", normalizedUsername);
       const historyResponse = await fetch("/api/lottery/history", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

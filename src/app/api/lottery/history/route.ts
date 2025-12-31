@@ -30,11 +30,26 @@ export async function GET(req: Request) {
     const db = await getDb();
     const collection = db.collection<HistoryDocument>("history");
 
-    // Find all history entries for this username, sorted by timestamp (newest first)
-    const historyEntries = await collection
-      .find({ username: username.trim() })
+    // Normalize username to lowercase for case-insensitive search
+    const normalizedUsername = username.trim().toLowerCase();
+    console.log("Searching for username (normalized):", normalizedUsername);
+
+    // First try exact match (for new entries that are normalized)
+    let historyEntries = await collection
+      .find({ username: normalizedUsername })
       .sort({ timestamp: -1 })
       .toArray();
+
+    // If no results, try case-insensitive regex (for old entries with mixed case)
+    if (historyEntries.length === 0) {
+      const escapedUsername = normalizedUsername.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      historyEntries = await collection
+        .find({ username: { $regex: new RegExp(`^${escapedUsername}$`, 'i') } })
+        .sort({ timestamp: -1 })
+        .toArray();
+    }
+
+    console.log(`Found ${historyEntries.length} history entries for username: ${normalizedUsername}`);
 
     // Convert to format expected by frontend
     const formattedHistory = historyEntries.map((entry) => ({
@@ -119,8 +134,12 @@ export async function POST(req: Request) {
     const db = await getDb();
     const collection = db.collection<HistoryDocument>("history");
 
+    // Normalize username to lowercase for consistency
+    const normalizedUsername = username.trim().toLowerCase();
+    console.log("Saving history for username (normalized):", normalizedUsername);
+
     const historyDoc: HistoryDocument = {
-      username: username.trim(),
+      username: normalizedUsername, // Store normalized username
       leagueId,
       leagueName: leagueName || "Unknown League",
       season: season || "Unknown Season",
@@ -174,10 +193,23 @@ export async function DELETE(req: Request) {
       );
     }
 
-    const result = await collection.deleteOne({
+    // Normalize username for case-insensitive match
+    const normalizedUsername = username.trim().toLowerCase();
+    
+    // First try exact match (for new entries that are normalized)
+    let result = await collection.deleteOne({
       _id: objectId,
-      username: username.trim(),
+      username: normalizedUsername,
     });
+
+    // If not found, try case-insensitive regex (for old entries with mixed case)
+    if (result.deletedCount === 0) {
+      const escapedUsername = normalizedUsername.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      result = await collection.deleteOne({
+        _id: objectId,
+        username: { $regex: new RegExp(`^${escapedUsername}$`, 'i') },
+      });
+    }
 
     if (result.deletedCount === 0) {
       return NextResponse.json(
