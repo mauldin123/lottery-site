@@ -106,21 +106,21 @@ export default function Home() {
       />
       <main className="min-h-screen">
       {/* Hero Section */}
-      <section className="mx-auto max-w-6xl px-4 sm:px-4 py-10 sm:py-20 text-center">
-        <div className="flex flex-col items-center justify-center gap-4 sm:gap-6">
+      <section className="mx-auto max-w-6xl px-4 sm:px-4 py-6 sm:py-20 text-center">
+        <div className="flex flex-col items-center justify-center gap-3 sm:gap-6">
           <img
             src="/logo.png"
             alt="Dynasty Lottery Logo"
-            className="w-20 h-20 sm:w-32 sm:h-32 md:w-40 md:h-40 flex-shrink-0"
+            className="w-16 h-16 sm:w-32 sm:h-32 md:w-40 md:h-40 flex-shrink-0"
           />
-          <h1 className="text-3xl sm:text-6xl font-bold tracking-tight text-zinc-100 sm:text-7xl leading-tight">
+          <h1 className="text-2xl sm:text-6xl font-bold tracking-tight text-zinc-100 sm:text-7xl leading-tight">
             Dynasty Fantasy Football Draft Lottery Generator
           </h1>
         </div>
-        <p className="mt-4 sm:mt-6 text-lg sm:text-xl text-zinc-400 sm:text-2xl">
+        <p className="mt-3 sm:mt-6 text-base sm:text-xl text-zinc-400 sm:text-2xl">
           Free Sleeper league lottery tool. Create fair, weighted draft orders to prevent tanking in your dynasty fantasy football league.
         </p>
-        <div className="mt-8 sm:mt-10 flex flex-col items-center justify-center gap-3 sm:gap-4 sm:flex-row">
+        <div className="mt-6 sm:mt-10 flex flex-col items-center justify-center gap-3 sm:gap-4 sm:flex-row">
           <Link
             href="/league"
             className="w-full sm:w-auto rounded-xl border border-emerald-800 bg-emerald-900 px-7 py-3.5 sm:px-8 sm:py-4 text-base sm:text-lg font-semibold text-emerald-100 transition-all hover:bg-emerald-800 hover:shadow-lg hover:shadow-emerald-900/50"
