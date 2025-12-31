@@ -41,11 +41,16 @@ export default function HistoryPage() {
 
   // Try to load username from localStorage on mount
   useEffect(() => {
-    const storedUsername = localStorage.getItem("sleeperUsername");
-    if (storedUsername) {
-      setUsername(storedUsername);
-      // Auto-load if username exists
-      loadSavedLotteries(storedUsername);
+    try {
+      const storedUsername = localStorage.getItem("sleeperUsername");
+      if (storedUsername) {
+        setUsername(storedUsername);
+        // Auto-load if username exists
+        loadSavedLotteries(storedUsername);
+      }
+    } catch (e) {
+      // localStorage might not be available (private mode, etc.)
+      console.warn("Could not access localStorage:", e);
     }
   }, []);
 
@@ -63,19 +68,34 @@ export default function HistoryPage() {
     setHasSearched(true);
 
     try {
+      // Add timeout for mobile networks
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
       const response = await fetch(
         `/api/lottery/history?username=${encodeURIComponent(usernameValue)}`,
         {
           cache: 'no-store',
+          signal: controller.signal,
           headers: {
             'Cache-Control': 'no-cache',
           },
         }
       );
+      
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to load history");
+        let errorMessage = `Server error: ${response.status} ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          // Response might not be JSON, use status text
+          const text = await response.text().catch(() => "");
+          errorMessage = text || errorMessage;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -89,8 +109,13 @@ export default function HistoryPage() {
         setSelectedLottery(null);
       }
       
-      // Save username to localStorage for convenience
-      localStorage.setItem("sleeperUsername", usernameValue);
+      // Save username to localStorage for convenience (with error handling)
+      try {
+        localStorage.setItem("sleeperUsername", usernameValue);
+      } catch (e) {
+        // localStorage might not be available, but that's okay
+        console.warn("Could not save username to localStorage:", e);
+      }
       
       // Log for debugging
       if (history.length > 0) {
@@ -99,7 +124,17 @@ export default function HistoryPage() {
         console.log(`No history found for username: ${usernameValue}`);
       }
     } catch (e: any) {
-      setError("Failed to load saved lotteries. " + (e?.message || ""));
+      console.error("Error loading history:", e);
+      let errorMessage = e?.message || "Unknown error occurred";
+      
+      // Provide more specific error messages
+      if (e.name === 'AbortError' || errorMessage.includes('timeout')) {
+        errorMessage = "Request timed out. Please check your internet connection and try again.";
+      } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+        errorMessage = "Network error. Please check your internet connection and try again.";
+      }
+      
+      setError(`Failed to load saved lotteries. ${errorMessage}`);
       setSavedLotteries([]);
     } finally {
       setLoading(false);
@@ -299,16 +334,61 @@ export default function HistoryPage() {
 
       {error ? (
         <div className="mt-6 rounded-2xl border border-red-900/60 bg-red-950/40 px-5 py-4 text-red-200">
-          {error}
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <div className="flex-1">
+              <h3 className="font-semibold text-red-100 mb-1">Error</h3>
+              <p className="text-sm">{error}</p>
+            </div>
+            <button
+              onClick={() => setError(null)}
+              className="text-red-400 hover:text-red-300 transition-colors"
+              aria-label="Dismiss error"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
       ) : null}
 
-      {!hasSearched ? (
+      {loading ? (
+        <div className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-8 text-center">
+          <div className="flex flex-col items-center gap-4">
+            <svg className="animate-spin h-8 w-8 text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p className="text-zinc-400">Loading history...</p>
+          </div>
+        </div>
+      ) : !hasSearched ? (
         <div className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-8 text-center">
           <h2 className="text-2xl font-semibold text-zinc-100 mb-2">Enter Your Username</h2>
           <p className="text-zinc-400 mb-6">
             Enter your Sleeper username above to view your lottery history.
           </p>
+        </div>
+      ) : error ? (
+        <div className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-8 text-center">
+          <h2 className="text-2xl font-semibold text-zinc-100 mb-2">Unable to Load History</h2>
+          <p className="text-zinc-400 mb-6">
+            There was an error loading your lottery history. Please try again or check your internet connection.
+          </p>
+          <button
+            onClick={() => {
+              setError(null);
+              if (username.trim().length >= 2) {
+                loadSavedLotteries();
+              }
+            }}
+            className="inline-block rounded-xl border border-emerald-800 bg-emerald-900 px-6 py-3 text-sm font-medium text-emerald-100 hover:bg-emerald-800"
+          >
+            Try Again
+          </button>
         </div>
       ) : savedLotteries.length === 0 ? (
         <div className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-8 text-center">

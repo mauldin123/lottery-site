@@ -61,6 +61,11 @@ export async function GET(req: Request) {
   } catch (e: any) {
     console.error("Error in GET /api/lottery/history:", e);
     const errorMessage = e?.message || "Unknown error";
+    console.error("Error details:", {
+      message: errorMessage,
+      stack: e?.stack,
+      name: e?.name,
+    });
     // Provide more helpful error messages
     if (errorMessage.includes("SSL") || errorMessage.includes("TLS")) {
       return NextResponse.json(
