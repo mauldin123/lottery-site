@@ -42,8 +42,16 @@ export async function GET(req: Request) {
     return NextResponse.json({ history: formattedHistory });
   } catch (e: any) {
     console.error("Error in GET /api/lottery/history:", e);
+    const errorMessage = e?.message || "Unknown error";
+    // Provide more helpful error messages
+    if (errorMessage.includes("SSL") || errorMessage.includes("TLS")) {
+      return NextResponse.json(
+        { error: "Database connection error. Please check MongoDB network access settings." },
+        { status: 500 }
+      );
+    }
     return NextResponse.json(
-      { error: "Failed to retrieve history. " + (e?.message || "") },
+      { error: "Failed to retrieve history. " + errorMessage },
       { status: 500 }
     );
   }

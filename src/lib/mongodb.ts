@@ -1,6 +1,14 @@
 import { MongoClient, Db } from 'mongodb';
 
-const options = {};
+// Connection options for MongoDB Atlas
+const options = {
+  // MongoDB Atlas requires SSL/TLS
+  // For mongodb+srv:// URIs, SSL is enabled by default
+  // These options ensure proper connection handling
+  maxPoolSize: 10,
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
+};
 
 let client: MongoClient;
 let clientPromise: Promise<MongoClient> | null = null;
