@@ -49,7 +49,7 @@ export default function LotteryCounter() {
   const formattedCount = count !== null ? count.toLocaleString() : "0";
 
   return (
-    <div className="mt-8 rounded-2xl border border-emerald-800 bg-emerald-950/20 px-6 py-5 text-center">
+    <div className="mt-6 rounded-2xl border border-emerald-800 bg-emerald-950/20 px-6 py-5 text-center">
       <div className="text-emerald-100 text-base sm:text-lg font-medium mb-1">
         Total Draft Lotteries Conducted
       </div>

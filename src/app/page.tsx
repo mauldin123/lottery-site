@@ -138,7 +138,7 @@ export default function Home() {
       </section>
 
       {/* SEO Rich Content Section */}
-      <section className="mx-auto max-w-6xl px-4 py-10 sm:py-16">
+      <section className="mx-auto max-w-6xl px-4 pt-6 pb-10 sm:pt-8 sm:pb-16">
         <div className="text-center mb-10 sm:mb-12">
           <h2 className="text-2xl sm:text-4xl font-bold text-zinc-100 mb-4 sm:mb-4">
             Free Fantasy Football Draft Lottery Generator for Sleeper Leagues
