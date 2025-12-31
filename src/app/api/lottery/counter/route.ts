@@ -13,7 +13,14 @@ export async function GET() {
     // If counter doesn't exist, return 0
     const count = counterDoc?.count || 0;
 
-    return NextResponse.json({ count });
+    // Prevent caching to ensure fresh data
+    return NextResponse.json({ count }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    });
   } catch (e: any) {
     console.error("Error in GET /api/lottery/counter:", e);
     // Return 0 on error to prevent breaking the UI
