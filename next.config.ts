@@ -11,6 +11,22 @@ const nextConfig: NextConfig = {
   compress: true,
   // Enable React strict mode for better development experience
   reactStrictMode: true,
+  // Redirects for canonical URL enforcement (www -> non-www)
+  async redirects() {
+    return [
+      {
+        source: '/:path*',
+        has: [
+          {
+            type: 'host',
+            value: 'www.dynastylottery.com',
+          },
+        ],
+        destination: 'https://dynastylottery.com/:path*',
+        permanent: true,
+      },
+    ];
+  },
   // Headers for SEO and security
   async headers() {
     return [
