@@ -3,14 +3,14 @@ import type { Metadata } from "next";
 import LotteryCounter from "./components/LotteryCounter";
 
 export const metadata: Metadata = {
-  title: "Fantasy Football Draft Lottery Generator | Sleeper League Lottery Tool",
-  description: "Free fantasy football draft lottery generator for Sleeper leagues. Create fair, weighted draft orders to prevent tanking. NBA-style lottery system with customizable odds. Works with Sleeper, ESPN, Yahoo, and all fantasy platforms.",
+  title: "Dynasty Fantasy Football Draft Lottery Generator | Sleeper League Lottery Tool",
+  description: "Free dynasty fantasy football draft lottery generator for Sleeper leagues. Create fair, weighted draft orders to prevent tanking. NBA-style lottery system with customizable odds. Works with Sleeper, ESPN, Yahoo, and all fantasy platforms.",
   alternates: {
     canonical: "https://dynastylottery.com",
   },
   openGraph: {
-    title: "Fantasy Football Draft Lottery Generator | Sleeper League Lottery Tool",
-    description: "Free fantasy football draft lottery generator for Sleeper leagues. Create fair, weighted draft orders to prevent tanking. NBA-style lottery system with customizable odds. Works with Sleeper, ESPN, Yahoo, and all fantasy platforms.",
+    title: "Dynasty Fantasy Football Draft Lottery Generator | Sleeper League Lottery Tool",
+    description: "Free dynasty fantasy football draft lottery generator for Sleeper leagues. Create fair, weighted draft orders to prevent tanking. NBA-style lottery system with customizable odds. Works with Sleeper, ESPN, Yahoo, and all fantasy platforms.",
     type: "website",
     url: "https://dynastylottery.com",
     images: [
@@ -28,8 +28,8 @@ export default function Home() {
   const structuredData = {
     "@context": "https://schema.org",
     "@type": "WebApplication",
-    "name": "Dynasty Lottery",
-    "description": "Transform your dynasty fantasy league with a fair, transparent lottery system. Prevent tanking, add excitement, and maintain league integrity with weighted draft order determination.",
+    "name": "Dynasty Fantasy Football Draft Lottery Generator | Sleeper League Lottery Tool",
+    "description": "Free dynasty fantasy football draft lottery generator for Sleeper leagues. Create fair, weighted draft orders to prevent tanking. NBA-style lottery system with customizable odds. Works with Sleeper, ESPN, Yahoo, and all fantasy platforms.",
     "url": process.env.NEXT_PUBLIC_SITE_URL || "https://dynastylottery.com",
     "applicationCategory": "SportsApplication",
     "operatingSystem": "Web",

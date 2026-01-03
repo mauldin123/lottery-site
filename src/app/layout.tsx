@@ -19,10 +19,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://dynastylottery.com'),
   title: {
-    default: "Fantasy Football Draft Lottery Generator | Sleeper League Lottery Tool",
+    default: "Dynasty Fantasy Football Draft Lottery Generator | Sleeper League Lottery Tool",
     template: "%s | Dynasty Lottery"
   },
-  description: "Free fantasy football draft lottery generator for Sleeper leagues. Create fair, weighted draft orders to prevent tanking. NBA-style lottery system with customizable odds. Works with Sleeper, ESPN, Yahoo, and all fantasy platforms.",
+  description: "Free dynasty fantasy football draft lottery generator for Sleeper leagues. Create fair, weighted draft orders to prevent tanking. NBA-style lottery system with customizable odds. Works with Sleeper, ESPN, Yahoo, and all fantasy platforms.",
   keywords: [
     "fantasy football draft lottery generator",
     "sleeper league lottery",
@@ -58,8 +58,8 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: "/",
     siteName: "Dynasty Lottery",
-    title: "Fantasy Football Draft Lottery Generator | Sleeper League Lottery Tool",
-    description: "Free fantasy football draft lottery generator for Sleeper leagues. Create fair, weighted draft orders to prevent tanking. NBA-style lottery system with customizable odds. Works with Sleeper, ESPN, Yahoo, and all fantasy platforms.",
+    title: "Dynasty Fantasy Football Draft Lottery Generator | Sleeper League Lottery Tool",
+    description: "Free dynasty fantasy football draft lottery generator for Sleeper leagues. Create fair, weighted draft orders to prevent tanking. NBA-style lottery system with customizable odds. Works with Sleeper, ESPN, Yahoo, and all fantasy platforms.",
     images: [
       {
         url: "/logo.png",
@@ -71,8 +71,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Fantasy Football Draft Lottery Generator | Sleeper League Lottery Tool",
-    description: "Free fantasy football draft lottery generator for Sleeper leagues. Create fair, weighted draft orders to prevent tanking. NBA-style lottery system with customizable odds.",
+    title: "Dynasty Fantasy Football Draft Lottery Generator | Sleeper League Lottery Tool",
+    description: "Free dynasty fantasy football draft lottery generator for Sleeper leagues. Create fair, weighted draft orders to prevent tanking. NBA-style lottery system with customizable odds.",
     images: ["/logo.png"],
     creator: "@dynastylottery",
   },

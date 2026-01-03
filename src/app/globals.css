@@ -67,6 +67,66 @@ p, h1, h2, h3, h4, h5, h6, span, div, li, td, th {
   transform-style: preserve-3d;
 }
 
+/* Focus indicators for keyboard navigation - WCAG compliant */
+*:focus-visible {
+  outline: 2px solid #10b981; /* emerald-500 */
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
+
+/* Remove default focus outline for mouse users */
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Ensure buttons and interactive elements have visible focus */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
+}
+
+/* Improved color contrast for better WCAG compliance */
+.text-zinc-400 {
+  color: #a1a1aa; /* Improved from default zinc-400 for better contrast */
+}
+
+.text-zinc-500 {
+  color: #71717a; /* Improved from default zinc-500 for better contrast */
+}
+
+/* Touch target improvements for mobile */
+button,
+a[role="button"],
+input[type="button"],
+input[type="submit"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Improved disabled button states */
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+button:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* Better disabled state for interactive elements */
+button:disabled:focus-visible {
+  outline: 2px solid #71717a; /* zinc-500 */
+  outline-offset: 2px;
+}
+
 /* Print styles */
 @media print {
   body {

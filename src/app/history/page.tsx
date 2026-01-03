@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import LoadingSpinner from "../components/LoadingSpinner";
+import EmptyState from "../components/EmptyState";
 
 type SavedLottery = {
   id: string;
@@ -363,21 +365,14 @@ export default function HistoryPage() {
 
       {loading ? (
         <div className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-8 text-center">
-          <div className="flex flex-col items-center gap-4">
-            <svg className="animate-spin h-8 w-8 text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <p className="text-zinc-400">Loading history...</p>
-          </div>
+          <LoadingSpinner size="md" text="Loading history..." />
         </div>
       ) : !hasSearched ? (
-        <div className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-8 text-center">
-          <h2 className="text-2xl font-semibold text-zinc-100 mb-2">Enter Your Username</h2>
-          <p className="text-zinc-400 mb-6">
-            Enter your Sleeper username above to view your lottery history.
-          </p>
-        </div>
+        <EmptyState
+          title="Enter Your Username"
+          description="Enter your Sleeper username above to view your lottery history."
+          className="mt-10"
+        />
       ) : error ? (
         <div className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-8 text-center">
           <h2 className="text-2xl font-semibold text-zinc-100 mb-2">Unable to Load History</h2>
@@ -391,24 +386,19 @@ export default function HistoryPage() {
                 loadSavedLotteries();
               }
             }}
-            className="inline-block rounded-xl border border-emerald-800 bg-emerald-900 px-6 py-3 text-sm font-medium text-emerald-100 hover:bg-emerald-800"
+            className="inline-block rounded-xl border border-emerald-800 bg-emerald-900 px-6 py-3 text-sm font-medium text-emerald-100 hover:bg-emerald-800 min-h-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500 focus-visible:outline-offset-2"
           >
             Try Again
           </button>
         </div>
       ) : savedLotteries.length === 0 ? (
-        <div className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-8 text-center">
-          <h2 className="text-2xl font-semibold text-zinc-100 mb-2">No Saved Lotteries</h2>
-          <p className="text-zinc-400 mb-6">
-            You haven't saved any lottery results yet. Run a lottery and save the results to see them here.
-          </p>
-          <Link
-            href="/league"
-            className="inline-block rounded-xl border border-emerald-800 bg-emerald-900 px-6 py-3 text-sm font-medium text-emerald-100 hover:bg-emerald-800"
-          >
-            Go to League Page
-          </Link>
-        </div>
+        <EmptyState
+          title="No Saved Lotteries"
+          description="You haven't saved any lottery results yet. Run a lottery and save the results to see them here."
+          actionLabel="Go to League Page"
+          actionHref="/league"
+          className="mt-10"
+        />
       ) : (
         <>
           {/* Filters */}
@@ -479,12 +469,13 @@ export default function HistoryPage() {
                         </div>
                       </div>
                       <button
-                        className="ml-4 rounded-lg border border-red-800 bg-red-950/40 px-3 py-1 text-xs font-medium text-red-200 hover:bg-red-950/60"
+                        className="ml-4 rounded-lg border border-red-800 bg-red-950/40 px-3 py-1 text-xs font-medium text-red-200 hover:bg-red-950/60 min-h-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500 focus-visible:outline-offset-2"
                         onClick={(e) => {
                           e.stopPropagation();
                           deleteLottery(lottery.id);
                         }}
                         title="Delete this lottery"
+                        aria-label={`Delete lottery for ${lottery.leagueName}, Season ${lottery.season}`}
                       >
                         Delete
                       </button>
@@ -504,16 +495,18 @@ export default function HistoryPage() {
                     </h2>
                     <div className="flex gap-2">
                       <button
-                        className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-100 hover:bg-zinc-800"
+                        className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-100 hover:bg-zinc-800 min-h-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500 focus-visible:outline-offset-2"
                         onClick={() => exportLotteryToJSON(selectedLottery)}
                         title="Export as JSON"
+                        aria-label="Export lottery results as JSON file"
                       >
                         JSON
                       </button>
                       <button
-                        className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-100 hover:bg-zinc-800"
+                        className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-100 hover:bg-zinc-800 min-h-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500 focus-visible:outline-offset-2"
                         onClick={() => exportLotteryToCSV(selectedLottery)}
                         title="Export as CSV"
+                        aria-label="Export lottery results as CSV file"
                       >
                         CSV
                       </button>

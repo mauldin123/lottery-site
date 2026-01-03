@@ -1,7 +1,7 @@
 {
-  "name": "Dynasty Lottery - Fair Draft Order for Fantasy Leagues",
+  "name": "Dynasty Fantasy Football Draft Lottery Generator | Sleeper League Lottery Tool",
   "short_name": "Dynasty Lottery",
-  "description": "Transform your dynasty fantasy league with a fair, transparent lottery system. Prevent tanking, add excitement, and maintain league integrity.",
+  "description": "Free dynasty fantasy football draft lottery generator for Sleeper leagues. Create fair, weighted draft orders to prevent tanking. NBA-style lottery system with customizable odds.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#18181b",

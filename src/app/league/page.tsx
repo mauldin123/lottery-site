@@ -3,6 +3,9 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { SkeletonTableRow, SkeletonChart } from "../components/SkeletonLoader";
+import ErrorMessage from "../components/ErrorMessage";
+import LoadingSpinner from "../components/LoadingSpinner";
+import { formatNumber, formatPercent, roundTo, formatNumberLocale } from "../../lib/utils";
 
 // Shape of the normalized user payload returned by `/api/sleeper/user/by-username/[username]`
 type UserResult = {
@@ -874,14 +877,14 @@ export default function LeaguePage() {
     });
     
     if (totalPercent > 100.1) { // Small buffer for rounding
-      return { valid: false, error: `Total percentages exceed 100% (${totalPercent.toFixed(1)}%). Please adjust your percentages before finalizing.` };
+      return { valid: false, error: `Total percentages exceed 100% (${formatPercent(totalPercent, 1)}). Please adjust your percentages before finalizing.` };
     }
     
     // Check for max balls value (prevent unreasonably large numbers)
     const MAX_BALLS = 10000;
     for (const config of lotteryConfigs.values()) {
       if (config.balls > MAX_BALLS) {
-        return { valid: false, error: `Balls value cannot exceed ${MAX_BALLS.toLocaleString()}. Please use a smaller number.` };
+        return { valid: false, error: `Balls value cannot exceed ${formatNumberLocale(MAX_BALLS)}. Please use a smaller number.` };
       }
     }
     
@@ -1053,7 +1056,7 @@ export default function LeaguePage() {
               pick: currentPick,
               rosterId: drawnRosterId,
               teamName: drawnTeam.displayName,
-              odds: Math.round(preLotteryOdds * 10) / 10, // Probability BEFORE lottery to land this specific pick
+              odds: roundTo(preLotteryOdds, 1), // Probability BEFORE lottery to land this specific pick
               wasLocked: false,
             });
             assignedRosterIds.add(drawnRosterId);
@@ -1528,7 +1531,7 @@ export default function LeaguePage() {
             // For lottery teams, calculate percentages from simulation counts
             pickMap.forEach((count, pick) => {
               const percentage = (count / divisor) * 100;
-              probMap.set(pick, Math.round(percentage * 10) / 10);
+              probMap.set(pick, roundTo(percentage, 1));
             });
           }
           
@@ -1970,12 +1973,9 @@ export default function LeaguePage() {
             aria-label={loadingUser || loadingLeagues ? "Loading leagues" : "Find leagues"}
           >
             {(loadingUser || loadingLeagues) && (
-              <svg className="animate-spin h-5 w-5 text-zinc-100" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
+              <LoadingSpinner size="sm" />
             )}
-            {loadingUser || loadingLeagues ? "Loading..." : "Find leagues"}
+            {loadingUser || loadingLeagues ? "Loading leagues..." : "Find leagues"}
           </button>
 
           {foundUser ? (
@@ -2059,12 +2059,9 @@ export default function LeaguePage() {
             aria-label={loadingLeagueDetails ? "Loading league" : "Load league"}
           >
             {loadingLeagueDetails && (
-              <svg className="animate-spin h-5 w-5 text-zinc-100" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
+              <LoadingSpinner size="sm" />
             )}
-            {loadingLeagueDetails ? "Loading..." : "Load league"}
+            {loadingLeagueDetails ? "Loading league..." : "Load league"}
           </button>
 
           {selectedLeagueId ? (
@@ -2076,55 +2073,35 @@ export default function LeaguePage() {
         </section>
       </div>
 
-      {error ? (
-        <div className="mt-6 rounded-2xl border border-red-900/60 bg-red-950/40 px-5 py-4 text-red-200" role="alert" aria-live="polite">
-          <div className="flex items-start gap-3">
-            <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
-            <div className="flex-1">
-              <h3 className="font-semibold text-red-100 mb-1">Error</h3>
-              <p className="text-sm mb-3">{error}</p>
-              <div className="flex flex-wrap gap-2">
-                {selectedLeagueId && (
-                  <button
-                    onClick={() => loadLeagueById(selectedLeagueId)}
-                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-red-800 bg-red-900/30 text-red-200 hover:bg-red-900/50 transition-colors min-h-[44px] min-w-[44px]"
-                    aria-label="Retry loading league"
-                  >
-                    Retry
-                  </button>
-                )}
-                {username && (
-                  <button
-                    onClick={() => findLeaguesByUsername()}
-                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-red-800 bg-red-900/30 text-red-200 hover:bg-red-900/50 transition-colors min-h-[44px] min-w-[44px]"
-                    aria-label="Retry finding leagues"
-                  >
-                    Retry
-                  </button>
-                )}
-                <button
-                  onClick={() => setError(null)}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-red-800 bg-red-900/30 text-red-200 hover:bg-red-900/50 transition-colors min-h-[44px] min-w-[44px]"
-                  aria-label="Dismiss error"
-                >
-                  Dismiss
-                </button>
-              </div>
-            </div>
-            <button
-              onClick={() => setError(null)}
-              className="text-red-400 hover:text-red-300 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-              aria-label="Dismiss error"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+      {error && (
+        <>
+          <ErrorMessage
+            message={error}
+            onDismiss={() => setError(null)}
+            className="mt-6"
+          />
+          <div className="mt-4 flex flex-wrap gap-2">
+            {selectedLeagueId && (
+              <button
+                onClick={() => loadLeagueById(selectedLeagueId)}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-red-800 bg-red-900/30 text-red-200 hover:bg-red-900/50 transition-colors min-h-[44px] min-w-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500 focus-visible:outline-offset-2"
+                aria-label="Retry loading league"
+              >
+                Retry
+              </button>
+            )}
+            {username && (
+              <button
+                onClick={() => findLeaguesByUsername()}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-red-800 bg-red-900/30 text-red-200 hover:bg-red-900/50 transition-colors min-h-[44px] min-w-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500 focus-visible:outline-offset-2"
+                aria-label="Retry finding leagues"
+              >
+                Retry
+              </button>
+            )}
           </div>
-        </div>
-      ) : null}
+        </>
+      )}
 
       {/* League + teams summary, followed by the per-team cards */}
       <section ref={leagueDetailsRef} className="mt-8 sm:mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4 sm:p-6">
@@ -2277,18 +2254,19 @@ export default function LeaguePage() {
                 id="fallProtection"
                 checked={fallProtectionEnabled}
                 onChange={(e) => setFallProtectionEnabled(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-zinc-700 bg-black text-emerald-600 focus:ring-2 focus:ring-emerald-600"
+                className="mt-1 h-4 w-4 rounded border-zinc-700 bg-black text-emerald-600 focus:ring-2 focus:ring-emerald-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500 focus-visible:outline-offset-2"
+                aria-describedby="fallProtectionDescription"
               />
               <div className="flex-1">
                 <label htmlFor="fallProtection" className="text-sm font-medium text-zinc-100 cursor-pointer">
                   Enable NBA-Style Fall Protection
                 </label>
-                <p className="text-xs text-zinc-400 mt-1">
+                <p id="fallProtectionDescription" className="text-xs text-zinc-400 mt-1">
                   Prevents teams from falling more than a set number of spots from their record-based position.
                 </p>
                 {fallProtectionEnabled && (
                   <div className="mt-3">
-                    <label className="block text-xs text-zinc-300 mb-1">
+                    <label htmlFor="fallProtectionSpots" className="block text-xs text-zinc-300 mb-1">
                       Maximum Fall (spots): 
                     </label>
                     <input
@@ -2320,8 +2298,9 @@ export default function LeaguePage() {
                         // Select all text on focus for easy clearing/retyping
                         e.target.select();
                       }}
-                      className="w-20 rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-sm text-zinc-100 min-h-[44px] touch-manipulation"
-                      style={{ WebkitAppearance: 'none', MozAppearance: 'textfield' }}
+                      className="w-20 sm:w-24 rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-sm text-zinc-100 min-h-[44px] touch-manipulation focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500 focus-visible:outline-offset-2"
+                      style={{ WebkitAppearance: 'none', MozAppearance: 'textfield', WebkitTapHighlightColor: 'rgba(16, 185, 129, 0.2)' }}
+                      id="fallProtectionSpots"
                     />
                     <p className="text-xs text-zinc-500 mt-1">
                       Example: With 4 spots, worst team can get picks 1-5 (not 1-{teams.length})
@@ -2358,10 +2337,11 @@ export default function LeaguePage() {
               Save For Comparison
             </button>
             <button
-              className="hidden sm:flex w-full sm:w-auto rounded-xl border border-emerald-800 bg-emerald-900 px-4 py-2.5 text-sm font-medium text-emerald-100 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 min-h-[44px]"
+              className="w-full sm:w-auto rounded-xl border border-emerald-800 bg-emerald-900 px-4 py-2.5 text-sm font-medium text-emerald-100 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-emerald-900 min-h-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500 focus-visible:outline-offset-2"
               disabled={teams.length === 0}
               onClick={finalizeLottery}
-              title="Finalize the lottery configuration and proceed to run the official lottery draw."
+              title={teams.length === 0 ? "Load a league first to finalize lottery" : "Finalize the lottery configuration and proceed to run the official lottery draw."}
+              aria-label={teams.length === 0 ? "Load a league first to finalize lottery" : "Finalize lottery and proceed to draw"}
             >
               Finalize Lottery
             </button>
@@ -2618,7 +2598,7 @@ export default function LeaguePage() {
                                   />
                                 </div>
                                 <span className="text-xs text-blue-200 w-10 sm:w-12 text-right">
-                                  {prob > 0 ? prob.toFixed(1) : '—'}%
+                                  {prob > 0 ? formatPercent(prob, 1) : '—'}
                                 </span>
                               </div>
                             );
@@ -2634,29 +2614,30 @@ export default function LeaguePage() {
 
           {/* Team lottery configuration table - Desktop */}
           <div className="hidden sm:block mt-6 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 relative">
+            {/* Scroll indicator for mobile-like view on small screens */}
+            <div className="absolute top-0 right-0 h-full w-8 bg-gradient-to-l from-zinc-950 to-transparent pointer-events-none z-10 sm:hidden" />
             {/* Total Percentage Display */}
             {(() => {
               let totalPercent = 0;
               teams.forEach((team) => {
                 const config = getLotteryConfig(team.rosterId);
                 if (config.includeInLottery && !config.isLockedPick) {
-                  const percentValue = percentInputValues.get(team.rosterId);
-                  if (percentValue && percentValue !== "") {
-                    const percent = parseFloat(percentValue);
-                    if (!isNaN(percent) && percent > 0) {
-                      totalPercent += percent;
-                    }
-                  }
+                  // Use calculatedPercent from config (more accurate than summing inputs)
+                  totalPercent += config.calculatedPercent;
                 }
               });
+              // Round to 1 decimal place to avoid display issues from floating point arithmetic
+              const roundedTotal = roundTo(totalPercent, 1);
+              // If very close to 100%, show as 100% (within 0.1% tolerance)
+              const displayTotal = Math.abs(roundedTotal - 100) <= 0.1 ? 100 : roundedTotal;
               return (
-                <div className={`mb-3 text-sm ${totalPercent > 100.1 ? 'text-red-400' : totalPercent < 99.9 ? 'text-yellow-400' : 'text-green-400'}`}>
+                <div className={`mb-3 text-sm ${roundedTotal > 100.1 ? 'text-red-400' : roundedTotal < 99.9 ? 'text-yellow-400' : 'text-green-400'}`}>
                   <span className="font-semibold">Total Percentage: </span>
-                  <span>{totalPercent.toFixed(1)}%</span>
-                  {totalPercent > 100.1 && (
+                  <span>{formatPercent(displayTotal, displayTotal === 100 ? 0 : 1)}</span>
+                  {roundedTotal > 100.1 && (
                     <span className="ml-2 text-xs">⚠️ Exceeds 100%</span>
                   )}
-                  {totalPercent < 99.9 && totalPercent > 0 && (
+                  {roundedTotal < 99.9 && roundedTotal > 0 && (
                     <span className="ml-2 text-xs">⚠️ Less than 100%</span>
                   )}
                 </div>
@@ -3077,23 +3058,22 @@ export default function LeaguePage() {
               teams.forEach((team) => {
                 const config = getLotteryConfig(team.rosterId);
                 if (config.includeInLottery && !config.isLockedPick) {
-                  const percentValue = percentInputValues.get(team.rosterId);
-                  if (percentValue && percentValue !== "") {
-                    const percent = parseFloat(percentValue);
-                    if (!isNaN(percent) && percent > 0) {
-                      totalPercent += percent;
-                    }
-                  }
+                  // Use calculatedPercent from config (more accurate than summing inputs)
+                  totalPercent += config.calculatedPercent;
                 }
               });
+              // Round to 1 decimal place to avoid display issues from floating point arithmetic
+              const roundedTotal = roundTo(totalPercent, 1);
+              // If very close to 100%, show as 100% (within 0.1% tolerance)
+              const displayTotal = Math.abs(roundedTotal - 100) <= 0.1 ? 100 : roundedTotal;
               return (
-                <div className={`mb-3 text-sm ${totalPercent > 100.1 ? 'text-red-400' : totalPercent < 99.9 ? 'text-yellow-400' : 'text-green-400'}`}>
+                <div className={`mb-3 text-sm ${roundedTotal > 100.1 ? 'text-red-400' : roundedTotal < 99.9 ? 'text-yellow-400' : 'text-green-400'}`}>
                   <span className="font-semibold">Total Percentage: </span>
-                  <span>{totalPercent.toFixed(1)}%</span>
-                  {totalPercent > 100.1 && (
+                  <span>{formatPercent(displayTotal, displayTotal === 100 ? 0 : 1)}</span>
+                  {roundedTotal > 100.1 && (
                     <span className="ml-2 text-xs">⚠️ Exceeds 100%</span>
                   )}
-                  {totalPercent < 99.9 && totalPercent > 0 && (
+                  {roundedTotal < 99.9 && roundedTotal > 0 && (
                     <span className="ml-2 text-xs">⚠️ Less than 100%</span>
                   )}
                 </div>
@@ -3472,13 +3452,13 @@ export default function LeaguePage() {
                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
               </svg>
             )}
-            <p className="text-sm font-medium text-white">{toast.message}</p>
+            <p className="text-sm font-medium text-white flex-1">{toast.message}</p>
             <button
               onClick={() => setToast(null)}
-              className="text-white/80 hover:text-white transition-colors ml-2"
+              className="text-white/80 hover:text-white transition-colors ml-2 min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2 rounded"
               aria-label="Dismiss notification"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>

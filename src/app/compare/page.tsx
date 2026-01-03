@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import EmptyState from "../components/EmptyState";
 
 type SavedConfiguration = {
   id: string;
@@ -124,18 +125,13 @@ export default function ComparePage() {
       )}
 
       {savedConfigs.length === 0 ? (
-        <div className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-8 text-center">
-          <p className="text-zinc-400 mb-4">No saved configurations yet.</p>
-          <p className="text-sm text-zinc-500 mb-6">
-            Go to the League page and click "Save for Comparison" to save configurations.
-          </p>
-          <Link
-            href="/league"
-            className="inline-block rounded-xl border border-emerald-800 bg-emerald-900 px-6 py-3 text-sm font-medium text-emerald-100 hover:bg-emerald-800"
-          >
-            Go to League Page
-          </Link>
-        </div>
+        <EmptyState
+          title="No Saved Configurations"
+          description="Go to the League page and click 'Save for Comparison' to save configurations."
+          actionLabel="Go to League Page"
+          actionHref="/league"
+          className="mt-10"
+        />
       ) : (
         <>
           {/* Configuration List */}
@@ -184,9 +180,10 @@ export default function ComparePage() {
                         </div>
                       </div>
                       <button
-                        className="rounded-lg border border-red-800 bg-red-950/40 px-3 py-1 text-xs font-medium text-red-200 hover:bg-red-950/60"
+                        className="rounded-lg border border-red-800 bg-red-950/40 px-3 py-1 text-xs font-medium text-red-200 hover:bg-red-950/60 min-h-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500 focus-visible:outline-offset-2"
                         onClick={() => deleteConfiguration(config.id)}
                         title="Delete this configuration"
+                        aria-label={`Delete configuration for ${config.leagueName}, Season ${config.season}`}
                       >
                         Delete
                       </button>
