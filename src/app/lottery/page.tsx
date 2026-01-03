@@ -493,8 +493,7 @@ export default function LotteryPage() {
           }
         });
 
-        // Assign non-lottery teams to their deserved picks BEFORE drawing
-        const nonLotteryTeamAssignments = new Map<number, number>(); // rosterId -> pick
+        // Identify non-lottery teams (but don't assign them yet - wait until after lottery draw)
         const nonLotteryTeams = teams.filter((t) => {
           const config = lotteryConfigs.get(t.rosterId);
           const isNonLottery = config && !config.includeInLottery && !config.isLockedPick;
@@ -506,99 +505,24 @@ export default function LotteryPage() {
             return false; // Exclude from non-lottery teams
           }
           
-          // Debug logging for teams 11 and 12
-          if (t.rosterId === 11 || t.rosterId === 12) {
-            console.log(`Team #${t.rosterId} classification:`);
-            console.log(`  includeInLottery: ${config?.includeInLottery}`);
-            console.log(`  isLockedPick: ${config?.isLockedPick}`);
-            console.log(`  balls: ${config?.balls}`);
-            console.log(`  Is non-lottery: ${isNonLottery}`);
-            if (isNonLottery && config?.balls > 0) {
-              console.error(`  ❌ ERROR: Team #${t.rosterId} has balls but is being treated as NON-LOTTERY!`);
-            }
-          }
-          
           return isNonLottery;
         });
-        
-        if (nonLotteryTeams.length > 0) {
-          // Sort non-lottery teams by record (worst first) to assign to worst remaining picks
-          const sortedNonLottery = [...nonLotteryTeams].sort((a, b) => {
-            const aW = a.record?.wins ?? 0;
-            const aL = a.record?.losses ?? 0;
-            const aT = a.record?.ties ?? 0;
-            const bW = b.record?.wins ?? 0;
-            const bL = b.record?.losses ?? 0;
-            const bT = b.record?.ties ?? 0;
-            
-            const aPct = winPct(aW, aL, aT);
-            const bPct = winPct(bW, bL, bT);
-            
-            if (aPct !== bPct) return aPct - bPct;
-            if (aW !== bW) return aW - bW;
-            if (bL !== aL) return bL - aL;
-            if (bT !== aT) return bT - aT;
-            return (b.rosterId ?? 0) - (a.rosterId ?? 0);
-          });
-          
-          // Non-lottery teams get picks starting after lottery teams
-          // But we need to account for locked picks when calculating which picks are available
-          let nextAvailablePick = eligibleTeams.length + 1;
-          sortedNonLottery.forEach((team) => {
-            // Find the next available pick that isn't locked and isn't already assigned
-            while (nextAvailablePick <= totalPicks && (lockedPicks.has(nextAvailablePick) || results.some(r => r.pick === nextAvailablePick) || Array.from(nonLotteryTeamAssignments.values()).includes(nextAvailablePick))) {
-              nextAvailablePick++;
-            }
-            if (nextAvailablePick <= totalPicks) {
-              nonLotteryTeamAssignments.set(team.rosterId, nextAvailablePick);
-              nextAvailablePick++;
-            }
-          });
-        }
-        
-        // Assign non-lottery teams to their fixed picks
-        // CRITICAL: Only assign teams that are NOT in eligibleTeams (not in lottery)
-        console.log(`Assigning ${nonLotteryTeamAssignments.size} non-lottery teams to picks...`);
-        nonLotteryTeamAssignments.forEach((pick, rosterId) => {
-          // Safety check: if this team is in eligibleTeams, they should NOT be assigned as non-lottery
-          const isInEligibleTeams = eligibleTeams.some(t => t.rosterId === rosterId);
-          if (isInEligibleTeams) {
-            console.error(`❌ CRITICAL ERROR: Team #${rosterId} is in eligibleTeams but was marked as non-lottery!`);
-            console.error(`   This team should be in the lottery, not assigned as non-lottery to pick ${pick}`);
-            // Remove from non-lottery assignments - they should be in the lottery
-            nonLotteryTeamAssignments.delete(rosterId);
-            return;
-          }
-          
-          const team = teamMap.get(rosterId);
-          if (team && !assignedRosterIds.has(rosterId) && !results.some(r => r.pick === pick)) {
-            console.log(`📌 Assigning non-lottery team #${rosterId} (${team.displayName}) to pick ${pick}`);
-            results.push({
-              pick,
-              rosterId,
-              teamName: team.displayName,
-              odds: 0,
-              wasLocked: false,
-            });
-            assignedRosterIds.add(rosterId);
-          }
-        });
-        
-        console.log(`After non-lottery assignment: ${results.length} picks assigned`);
-        console.log(`Assigned picks: ${results.map(r => r.pick).sort((a, b) => a - b).join(', ')}`);
 
-        // Draw remaining picks sequentially (original logic)
+        // Draw lottery picks sequentially - lottery teams should get the first N available picks
+        // where N = eligibleTeams.length (excluding locked picks)
         let currentPick = 1;
         let consecutiveFailures = 0;
         const maxFailures = totalPicks * 2; // Safety limit to prevent infinite loops
+        let lotteryPicksAssigned = 0; // Track how many lottery picks we've assigned
+        const targetLotteryPicks = eligibleTeams.length; // Lottery teams should get exactly this many picks
         
         console.log(`Starting lottery draw. Eligible teams: ${eligibleTeams.length}, Non-lottery teams: ${nonLotteryTeams.length}`);
-        const nonLotteryPicksArray = Array.from(nonLotteryTeamAssignments.values()).sort((a, b) => a - b);
         const lockedPicksArray = Array.from(lockedPicks.keys()).sort((a, b) => a - b);
-        console.log(`Non-lottery picks assigned: ${nonLotteryPicksArray.join(', ')}`);
         console.log(`Locked picks: ${lockedPicksArray.join(', ')}`);
+        console.log(`Target lottery picks: ${targetLotteryPicks} (excluding locked picks)`);
         
-        while (results.length < totalPicks && currentPick <= totalPicks) {
+        // Draw lottery picks first - stop when we've assigned all eligible teams
+        while (lotteryPicksAssigned < targetLotteryPicks && currentPick <= totalPicks) {
           // Safety check: if we've tried too many times without progress, break
           if (consecutiveFailures >= maxFailures) {
             console.error("Lottery draw stuck, breaking out of loop");
@@ -614,14 +538,6 @@ export default function LotteryPage() {
           if (lockedPicks.has(currentPick)) {
             currentPick++;
             consecutiveFailures = 0; // Reset on locked pick (expected)
-            continue;
-          }
-
-          // Skip picks already assigned to non-lottery teams
-          const isNonLotteryPick = Array.from(nonLotteryTeamAssignments.values()).includes(currentPick);
-          if (isNonLotteryPick) {
-            currentPick++;
-            consecutiveFailures = 0; // Reset on non-lottery pick (expected)
             continue;
           }
           
@@ -668,7 +584,6 @@ export default function LotteryPage() {
                       if (pick > maxAllowedPick) continue;
                       if (lockedPicks.has(pick)) continue;
                       if (results.some(r => r.pick === pick)) continue;
-                      if (Array.from(nonLotteryTeamAssignments.values()).includes(pick)) continue;
                       
                       bestValidPick = pick;
                       break; // Found the best (lowest) valid pick
@@ -679,7 +594,6 @@ export default function LotteryPage() {
                       for (let targetPick = 1; targetPick <= Math.min(maxAllowedPick, totalPicks); targetPick++) {
                         if (targetPick > maxAllowedPick) continue;
                         if (lockedPicks.has(targetPick)) continue;
-                        if (Array.from(nonLotteryTeamAssignments.values()).includes(targetPick)) continue;
                         
                         // Find the team currently assigned to this pick
                         const currentAssignment = results.find(r => r.pick === targetPick);
@@ -691,7 +605,6 @@ export default function LotteryPage() {
                             for (let worsePick = targetPick + 1; worsePick <= Math.min(currentTeamMaxPick, totalPicks); worsePick++) {
                               if (worsePick > currentTeamMaxPick) break;
                               if (lockedPicks.has(worsePick)) continue;
-                              if (Array.from(nonLotteryTeamAssignments.values()).includes(worsePick)) continue;
                               
                               // If the worse pick is unassigned, simple swap
                               if (!results.some(r => r.pick === worsePick)) {
@@ -711,7 +624,6 @@ export default function LotteryPage() {
                                       if (chainPick > worseTeamMaxPick) break;
                                       if (lockedPicks.has(chainPick)) continue;
                                       if (results.some(r => r.pick === chainPick)) continue;
-                                      if (Array.from(nonLotteryTeamAssignments.values()).includes(chainPick)) continue;
                                       
                                       // Found a chain: current team -> worsePick, worse team -> chainPick
                                       console.log(`  🔄 Chain swap: Team #${currentAssignment.rosterId} (rank ${currentTeamRank}) → pick ${worsePick}, Team #${worsePickAssignment.rosterId} (rank ${worseTeamRank}) → pick ${chainPick}`);
@@ -736,7 +648,6 @@ export default function LotteryPage() {
                   for (let pick = 1; pick <= totalPicks; pick++) {
                     if (lockedPicks.has(pick)) continue;
                     if (results.some(r => r.pick === pick)) continue;
-                    if (Array.from(nonLotteryTeamAssignments.values()).includes(pick)) continue;
                     
                     bestValidPick = pick;
                     break; // Found the best (lowest) available pick
@@ -781,56 +692,7 @@ export default function LotteryPage() {
               currentPick++;
               continue;
             } else {
-              // All lottery teams assigned - check if we need to assign remaining picks to non-lottery teams
-              const remainingPicks: number[] = [];
-              for (let pick = 1; pick <= totalPicks; pick++) {
-                if (!lockedPicks.has(pick) && !results.some(r => r.pick === pick) && !Array.from(nonLotteryTeamAssignments.values()).includes(pick)) {
-                  remainingPicks.push(pick);
-                }
-              }
-              
-              // If there are remaining picks, assign them to non-lottery teams
-              if (remainingPicks.length > 0) {
-                const unassignedNonLottery = teams.filter(t => {
-                  const config = lotteryConfigs.get(t.rosterId);
-                  return config && !config.includeInLottery && !config.isLockedPick && !assignedRosterIds.has(t.rosterId);
-                });
-                
-                if (unassignedNonLottery.length > 0) {
-                  const sortedNonLottery = [...unassignedNonLottery].sort((a, b) => {
-                const aW = a.record?.wins ?? 0;
-                const aL = a.record?.losses ?? 0;
-                const aT = a.record?.ties ?? 0;
-                const bW = b.record?.wins ?? 0;
-                const bL = b.record?.losses ?? 0;
-                const bT = b.record?.ties ?? 0;
-                const aPct = winPct(aW, aL, aT);
-                const bPct = winPct(bW, bL, bT);
-                if (aPct !== bPct) return aPct - bPct;
-                if (aW !== bW) return aW - bW;
-                if (bL !== aL) return bL - aL;
-                if (bT !== aT) return bT - aT;
-                return (b.rosterId ?? 0) - (a.rosterId ?? 0);
-              });
-              
-                  sortedNonLottery.forEach((team, index) => {
-                    if (index < remainingPicks.length) {
-                      const pick = remainingPicks[index];
-              results.push({
-                        pick,
-                rosterId: team.rosterId,
-                teamName: team.displayName,
-                odds: 0,
-                wasLocked: false,
-              });
-              assignedRosterIds.add(team.rosterId);
-                      console.warn(`✓ Assigned remaining non-lottery team #${team.rosterId} to pick ${pick}`);
-                    }
-                  });
-                }
-              }
-              
-              // All teams assigned - we're done
+              // All lottery teams assigned - we're done with lottery draw
               break;
             }
           }
@@ -864,10 +726,62 @@ export default function LotteryPage() {
               wasLocked: false,
             });
             assignedRosterIds.add(drawnRosterId);
+            lotteryPicksAssigned++; // Increment lottery picks counter
             consecutiveFailures = 0; // Reset on successful assignment
           }
 
           currentPick++;
+        }
+        
+        console.log(`Lottery draw complete. Assigned ${lotteryPicksAssigned} lottery picks.`);
+        
+        // Now assign non-lottery teams to remaining picks
+        if (nonLotteryTeams.length > 0) {
+          // Sort non-lottery teams by record (worst first) to assign to worst remaining picks
+          const sortedNonLottery = [...nonLotteryTeams].sort((a, b) => {
+            const aW = a.record?.wins ?? 0;
+            const aL = a.record?.losses ?? 0;
+            const aT = a.record?.ties ?? 0;
+            const bW = b.record?.wins ?? 0;
+            const bL = b.record?.losses ?? 0;
+            const bT = b.record?.ties ?? 0;
+            
+            const aPct = winPct(aW, aL, aT);
+            const bPct = winPct(bW, bL, bT);
+            
+            if (aPct !== bPct) return aPct - bPct;
+            if (aW !== bW) return aW - bW;
+            if (bL !== aL) return bL - aL;
+            if (bT !== aT) return bT - aT;
+            return (b.rosterId ?? 0) - (a.rosterId ?? 0);
+          });
+          
+          // Find remaining unassigned picks (excluding locked picks)
+          const remainingPicks: number[] = [];
+          for (let pick = 1; pick <= totalPicks; pick++) {
+            if (!lockedPicks.has(pick) && !results.some(r => r.pick === pick)) {
+              remainingPicks.push(pick);
+            }
+          }
+          
+          // Assign non-lottery teams to remaining picks
+          sortedNonLottery.forEach((team, index) => {
+            if (index < remainingPicks.length) {
+              const pick = remainingPicks[index];
+              const teamObj = teamMap.get(team.rosterId);
+              if (teamObj && !assignedRosterIds.has(team.rosterId)) {
+                console.log(`📌 Assigning non-lottery team #${team.rosterId} (${teamObj.displayName}) to pick ${pick}`);
+                results.push({
+                  pick,
+                  rosterId: team.rosterId,
+                  teamName: teamObj.displayName,
+                  odds: 0,
+                  wasLocked: false,
+                });
+                assignedRosterIds.add(team.rosterId);
+              }
+            }
+          });
         }
 
         // After loop, ensure ALL picks are assigned - this is critical
@@ -899,7 +813,6 @@ export default function LotteryPage() {
                     if (pick > maxAllowedPick) continue;
                     if (lockedPicks.has(pick)) continue;
                     if (results.some(r => r.pick === pick)) continue;
-                    if (Array.from(nonLotteryTeamAssignments.values()).includes(pick)) continue;
                     
                     // Valid assignment - calculate odds even though assigned via fallback
                     const teamObj = teams.find(t => t.rosterId === team.rosterId);
@@ -927,7 +840,7 @@ export default function LotteryPage() {
                   }
                 } else {
                   // No rank - can take any pick - calculate odds
-                  const availablePick = unassignedPicks.find(p => !results.some(r => r.pick === p) && !Array.from(nonLotteryTeamAssignments.values()).includes(p));
+                  const availablePick = unassignedPicks.find(p => !results.some(r => r.pick === p));
                   if (availablePick) {
                     const teamObj = teams.find(t => t.rosterId === team.rosterId);
                     if (teamObj) {
@@ -954,7 +867,7 @@ export default function LotteryPage() {
                 }
               } else {
                 // Fall protection not enabled - can take any pick - calculate odds
-                const availablePick = unassignedPicks.find(p => !results.some(r => r.pick === p) && !Array.from(nonLotteryTeamAssignments.values()).includes(p));
+                const availablePick = unassignedPicks.find(p => !results.some(r => r.pick === p));
                 if (availablePick) {
                   const teamObj = teams.find(t => t.rosterId === team.rosterId);
                   if (teamObj) {

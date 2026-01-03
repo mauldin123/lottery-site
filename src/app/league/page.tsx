@@ -1156,46 +1156,11 @@ export default function LeaguePage() {
           }
         });
 
-        // Assign non-lottery teams to their deserved picks BEFORE simulation
-        // Non-lottery teams get picks AFTER all lottery picks (worst non-lottery gets worst remaining pick)
-        const nonLotteryTeamAssignments = new Map<number, number>(); // rosterId -> pick
+        // Identify non-lottery teams (but don't assign them yet - wait until after lottery draw)
         const nonLotteryTeams = teams.filter((t) => {
           const config = getLotteryConfig(t.rosterId);
           return !config.includeInLottery && !config.isLockedPick;
         });
-        
-        // Count lottery teams (excluding locked picks)
-        const lotteryTeamCount = eligibleTeams.length;
-        
-        if (nonLotteryTeams.length > 0) {
-          // Sort non-lottery teams by record (worst first) to assign to worst remaining picks
-          const sortedNonLottery = [...nonLotteryTeams].sort((a, b) => {
-            const aW = a.record?.wins ?? 0;
-            const aL = a.record?.losses ?? 0;
-            const aT = a.record?.ties ?? 0;
-            const bW = b.record?.wins ?? 0;
-            const bL = b.record?.losses ?? 0;
-            const bT = b.record?.ties ?? 0;
-            
-            const aPct = winPct(aW, aL, aT);
-            const bPct = winPct(bW, bL, bT);
-            
-            if (aPct !== bPct) return aPct - bPct;
-            if (aW !== bW) return aW - bW;
-            if (bL !== aL) return bL - aL;
-            if (bT !== aT) return bT - aT;
-            return (b.rosterId ?? 0) - (a.rosterId ?? 0);
-          });
-          
-          // Non-lottery teams get picks starting after lottery teams
-          // Worst non-lottery team gets pick (lotteryTeamCount + 1), best gets last pick
-          sortedNonLottery.forEach((team, index) => {
-            const deservedPick = lotteryTeamCount + 1 + index;
-            if (deservedPick <= totalPicks && !lockedPicks.has(deservedPick)) {
-              nonLotteryTeamAssignments.set(team.rosterId, deservedPick);
-            }
-          });
-        }
 
         // Track valid simulations for accurate percentage calculation
         let validSimulationCount = 0;
@@ -1213,21 +1178,16 @@ export default function LeaguePage() {
             results.push({ pick: pickNum, rosterId });
             assignedRosterIds.add(rosterId);
           });
-          
-          // Assign non-lottery teams to their fixed picks
-          nonLotteryTeamAssignments.forEach((pick, rosterId) => {
-            if (!assignedRosterIds.has(rosterId) && !results.some(r => r.pick === pick)) {
-              results.push({ pick, rosterId });
-              assignedRosterIds.add(rosterId);
-            }
-          });
 
-          // Draw remaining picks
+          // Draw lottery picks sequentially - lottery teams should get the first N available picks
+          // where N = eligibleTeams.length (excluding locked picks)
           let currentPick = 1;
           let consecutiveFailures = 0;
           const maxFailures = totalPicks * 2; // Safety limit to prevent infinite loops
+          let lotteryPicksAssigned = 0; // Track how many lottery picks we've assigned
+          const targetLotteryPicks = eligibleTeams.length; // Lottery teams should get exactly this many picks
           
-          while (results.length < totalPicks) {
+          while (lotteryPicksAssigned < targetLotteryPicks && currentPick <= totalPicks) {
             // Safety check: if we've tried too many times without progress, break
             if (consecutiveFailures >= maxFailures || currentPick > totalPicks * 2) {
               console.warn("Lottery draw stuck, breaking out of loop");
@@ -1237,14 +1197,6 @@ export default function LeaguePage() {
             if (lockedPicks.has(currentPick)) {
               currentPick++;
               consecutiveFailures = 0; // Reset on locked pick (expected)
-              continue;
-            }
-            
-            // Skip picks already assigned to non-lottery teams
-            const isNonLotteryPick = Array.from(nonLotteryTeamAssignments.values()).includes(currentPick);
-            if (isNonLotteryPick) {
-              currentPick++;
-              consecutiveFailures = 0; // Reset on non-lottery pick (expected)
               continue;
             }
             
@@ -1412,6 +1364,7 @@ export default function LeaguePage() {
                   }
                   results.push({ pick: bestValidPick, rosterId: correctRosterId });
                   assignedRosterIds.add(correctRosterId);
+                  lotteryPicksAssigned++; // Increment lottery picks counter
                   assignedAny = true;
                 } else {
                   console.error(`❌ Could not find valid pick for Team #${correctRosterId} (rank ${teamRanks?.get(correctRosterId)}, max=${teamRanks?.get(correctRosterId) ? teamRanks.get(correctRosterId)! + fallProtectionSpots : totalPicks})`);
@@ -1456,8 +1409,50 @@ export default function LeaguePage() {
 
             results.push({ pick: currentPick, rosterId: drawnRosterId });
             assignedRosterIds.add(drawnRosterId);
+            lotteryPicksAssigned++; // Increment lottery picks counter
             consecutiveFailures = 0; // Reset on successful assignment
             currentPick++;
+          }
+          
+          // Now assign non-lottery teams to remaining picks
+          if (nonLotteryTeams.length > 0) {
+            // Sort non-lottery teams by record (worst first) to assign to worst remaining picks
+            const sortedNonLottery = [...nonLotteryTeams].sort((a, b) => {
+              const aW = a.record?.wins ?? 0;
+              const aL = a.record?.losses ?? 0;
+              const aT = a.record?.ties ?? 0;
+              const bW = b.record?.wins ?? 0;
+              const bL = b.record?.losses ?? 0;
+              const bT = b.record?.ties ?? 0;
+              
+              const aPct = winPct(aW, aL, aT);
+              const bPct = winPct(bW, bL, bT);
+              
+              if (aPct !== bPct) return aPct - bPct;
+              if (aW !== bW) return aW - bW;
+              if (bL !== aL) return bL - aL;
+              if (bT !== aT) return bT - aT;
+              return (b.rosterId ?? 0) - (a.rosterId ?? 0);
+            });
+            
+            // Find remaining unassigned picks (excluding locked picks)
+            const remainingPicks: number[] = [];
+            for (let pick = 1; pick <= totalPicks; pick++) {
+              if (!lockedPicks.has(pick) && !results.some(r => r.pick === pick)) {
+                remainingPicks.push(pick);
+              }
+            }
+            
+            // Assign non-lottery teams to remaining picks
+            sortedNonLottery.forEach((team, index) => {
+              if (index < remainingPicks.length) {
+                const pick = remainingPicks[index];
+                if (!assignedRosterIds.has(team.rosterId)) {
+                  results.push({ pick, rosterId: team.rosterId });
+                  assignedRosterIds.add(team.rosterId);
+                }
+              }
+            });
           }
 
           // Fall protection is now enforced during the draw, so no post-processing needed
@@ -1505,17 +1500,29 @@ export default function LeaguePage() {
           }
         }
 
-        // Convert counts to percentages (use validSimulationCount instead of NUM_SIMULATIONS)
+          // Convert counts to percentages (use validSimulationCount instead of NUM_SIMULATIONS)
         const probabilities = new Map<number, Map<number, number>>();
         const divisor = validSimulationCount > 0 ? validSimulationCount : NUM_SIMULATIONS;
+        
+        // Identify non-lottery teams for probability calculation
+        const nonLotteryRosterIds = new Set<number>();
+        nonLotteryTeams.forEach(t => nonLotteryRosterIds.add(t.rosterId));
+        
         pickCounts.forEach((pickMap, rosterId) => {
           const probMap = new Map<number, number>();
           
-          // For non-lottery teams, set 100% for their deserved pick, 0% for all others
-          if (nonLotteryTeamAssignments.has(rosterId)) {
-            const deservedPick = nonLotteryTeamAssignments.get(rosterId)!;
+          // For non-lottery teams, find their most common pick and set 100% for that pick
+          if (nonLotteryRosterIds.has(rosterId)) {
+            let maxCount = 0;
+            let mostCommonPick = 1;
+            pickMap.forEach((count, pick) => {
+              if (count > maxCount) {
+                maxCount = count;
+                mostCommonPick = pick;
+              }
+            });
             for (let pick = 1; pick <= totalPicks; pick++) {
-              probMap.set(pick, pick === deservedPick ? 100 : 0);
+              probMap.set(pick, pick === mostCommonPick ? 100 : 0);
             }
           } else {
             // For lottery teams, calculate percentages from simulation counts
