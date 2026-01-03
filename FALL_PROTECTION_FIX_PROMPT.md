@@ -78,3 +78,4 @@ After the fix:
 - Locked picks should be excluded from fall protection enforcement
 - The probability distribution is based on 10,000 simulations
 
+
